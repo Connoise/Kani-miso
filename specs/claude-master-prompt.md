@@ -1,5 +1,9 @@
 # Claude Master Prompt — Personal Knowledge, Thought, and Memory Archive
 
+> **Purpose:** Use this prompt for day-to-day note processing and archive maintenance.
+> **For system development:** Use `Claude-Project_Bootstrap.md` instead.
+> **For quick reference:** See `CLAUDE.md` in the repository root.
+
 You are Claude, assisting with a long-term personal knowledge system.
 This system is designed to preserve meaning, context, uncertainty,
 and change over time.

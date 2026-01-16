@@ -1,0 +1,40 @@
+# Second Brain Configuration
+# This file is tracked in Git - NO SECRETS HERE
+# Put secrets in config/.env (gitignored)
+
+telegram:
+  enabled: true
+  queue_type: "sqlite"  # Queue storage method
+  default_surface: "mobile"  # Assume mobile unless specified
+
+processing:
+  batch_size: 50  # Max items to process in one run
+  auto_commit: true  # Create git commits automatically
+  auto_push: false  # Require manual review before push
+
+claude:
+  model: "claude-sonnet-4-5-20250929"  # Claude Sonnet 4.5 - Latest, excellent quality
+  max_tokens: 4096
+  temperature: 0.7  # Slightly creative but consistent
+  # Alternative: claude-opus-4-5-20251101 for highest quality (slower, more expensive)
+
+git:
+  commit_prefix: "process"  # Commit message prefix
+  branch_strategy: "main"  # Commit directly to main
+
+folders:
+  notes: "notes"
+  reflections: "reflections"
+  sources: "sources"
+  inbox: "inbox"
+  hubs: "hubs"
+
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "logs/processor.log"
+  console: true
+
+paths:
+  repo_root: "."
+  queue_db: "queue/captures.db"
+  specs_dir: "specs"

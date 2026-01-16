@@ -1,0 +1,32 @@
+# Second Brain - Personal Knowledge Archive Automation
+# Python 3.11+ required
+
+# Telegram Bot (using HTTP API directly)
+requests==2.31.0
+
+# Claude API
+anthropic==0.18.1
+
+# Database
+# SQLite is built into Python, no external dependency needed
+
+# Configuration
+python-dotenv==1.0.0
+pyyaml==6.0.1
+
+# Git operations
+gitpython==3.1.41
+
+# Utilities
+python-slugify==8.0.1
+python-dateutil==2.8.2
+
+# Logging (built-in, but colorama for better console output)
+colorama==0.4.6
+
+# PDF processing (for source captures)
+PyPDF2==3.0.1
+pypdf==4.0.1
+
+# Optional: Better markdown parsing
+markdown==3.5.2

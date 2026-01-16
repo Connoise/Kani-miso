@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Purpose:** Quick reference for Claude Code instances.
+> **For detailed processing rules:** See `specs/claude-master-prompt.md`.
+> **For system development:** See `specs/Claude-Project_Bootstrap.md`.
+
 ## What This Repository Is
 
 A long-term personal knowledge, thought, and memory archive organized as:

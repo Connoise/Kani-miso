@@ -1,64 +1,31 @@
-&nbsp;---
+---
+source: telegram
+captured_at: 2026-01-09
+surface: mobile
+capture_mode: quick
+mood: slightly unsure
+tags: [raw, testing]
+---
 
-&nbsp; source: telegram
+# Testing Claude
 
-&nbsp; captured\_at: 2026-01-09
+## Raw Capture
+Testing Claude
 
-&nbsp; surface: mobile
+## Context
+- Surface: Mobile
+- Mood: slightly unsure
+- Trigger: (not specified)
+- Constraints: Quick capture, minimal elaboration
 
-&nbsp; capture\_mode: quick
+## Initial Interpretation
+This appears to be a test capture, possibly to verify the capture-to-archive workflow is functioning. The brevity and stated uncertainty suggest an experimental or exploratory intent rather than a complete thought.
 
-&nbsp; mood: slightly unsure
+The capture may be checking whether the system preserves metadata (surface, mood, confidence) and processes minimal input appropriately.
 
-&nbsp; tags: \[raw, testing]
+## Themes
+- System testing
+- Capture workflow verification
 
-&nbsp; ---
-
-
-
-&nbsp; # Testing Claude
-
-
-
-&nbsp; ## Raw Capture
-
-&nbsp; Testing Claude
-
-
-
-&nbsp; ## Context
-
-&nbsp; - Surface: Mobile
-
-&nbsp; - Mood: slightly unsure
-
-&nbsp; - Trigger: (not specified)
-
-&nbsp; - Constraints: Quick capture, minimal elaboration
-
-
-
-&nbsp; ## Initial Interpretation
-
-&nbsp; This appears to be a test capture, possibly to verify the capture-to-archive workflow is functioning. The brevity and stated uncertainty suggest an experimental or exploratory intent rather than a complete thought.
-
-
-
-&nbsp; The capture may be checking whether the system preserves metadata (surface, mood, confidence) and processes minimal input appropriately.
-
-
-
-&nbsp; ## Themes
-
-&nbsp; - System testing
-
-&nbsp; - Capture workflow verification
-
-
-
-&nbsp; ## Related Hub Notes (Suggested)
-
-&nbsp; (No hub suggestions - capture is procedural rather than conceptual)
-
-
-
+## Related Hub Notes (Suggested)
+(No hub suggestions - capture is procedural rather than conceptual)

@@ -2,10 +2,12 @@
 
 This repository contains a long-term personal knowledge system designed to capture thoughts, emotions, and information over time while preserving context, uncertainty, and change.
 
-This is not a productivity system.  
-This is not a static knowledge base.  
+This is not a productivity system.
+This is not a static knowledge base.
 
 It is a living archive of attention.
+
+> **Note:** This README provides an overview for newcomers. For technical specifications and system operators, see [`specs/00-overview.md`](specs/00-overview.md).
 
 ---
 

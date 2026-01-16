@@ -1,5 +1,7 @@
 # Personal Knowledge, Thought, and Memory Archive
 
+> **Note:** This is the technical specification. For a general introduction, see [`README.md`](../README.md) in the repository root.
+
 ## What This Project Is
 This project defines a long-term personal system for capturing, processing,
 and organizing thoughts, emotions, and external information.
