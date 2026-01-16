@@ -29,15 +29,19 @@ A hub does NOT represent:
 
 ## Minimum Conditions for Hub Promotion
 
-A concept may be promoted to a hub when **multiple** of the following are true:
+A concept may be promoted to a hub when **at least 2-3** of the following are true:
 
-- The concept appears across multiple notes
-- The notes occur at different times
+- The concept appears across multiple notes (3+)
+- The notes occur at different times (span 3+ months)
 - The concept is referenced in different contexts or moods
 - The concept connects to multiple domains or themes
 - The concept reduces wording drift when named consistently
 
+**Quantified Guideline**: If a concept meets 2 of these criteria, promotion is *possible*. If it meets 3+, promotion is *recommended*.
+
 No single condition is sufficient on its own.
+
+**See also**: `specs/15-tags-and-hubs-interaction.md` for tag-to-hub promotion thresholds.
 
 ---
 

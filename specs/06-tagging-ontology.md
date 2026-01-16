@@ -44,13 +44,28 @@ video, podcast, tweet, forum,
 screenshot
 
 ### Status
+
+**For Notes**:
 raw, processed, evolving,
 evergreen, dormant, obsolete
+
+**For Hubs**:
+empty, active, dormant, obsolete
 
 ---
 
 ## Tag Rules
 - Tags are optional
 - Tags may contradict each other
-- Tags may decay naturally
+- Tags may decay naturally (see `specs/15-tags-and-hubs-interaction.md`)
 - Tags do not determine structure
+
+---
+
+## Further Reading
+
+For detailed information:
+- Tag and hub interaction: `specs/15-tags-and-hubs-interaction.md`
+- Tag decay mechanisms: `specs/15-tags-and-hubs-interaction.md`
+- Formal data model: `specs/13-formal-data-model.md`
+- Note lifecycle and status transitions: `specs/12-note-lifecycle.md`

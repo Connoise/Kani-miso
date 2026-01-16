@@ -173,17 +173,38 @@ When processing captures, include:
 
 ## Required Reading Before Major Actions
 
-If undertaking significant work, review these specs first:
-- `00-overview.md`
-- `02-system-architecture.md`
-- `04-processing-spec.md`
-- `06-tagging-ontology.md`
-- `12-note-lifecycle.md`
-- `automation-overview.md`
-- `note-editing-safety.md`
-- `contradiction-handling.md`
+### Core Specs (Read First)
+- `00-overview.md` - System overview
+- `02-system-architecture.md` - Architectural principles
+- `04-processing-spec.md` - Processing rules
+- `13-formal-data-model.md` - **Data model and schema**
+- `17-ai-action-boundaries.md` - **What AI can/cannot do**
 
-If there is a conflict between any content and the specs, **the specs take precedence**.
+### Operational Specs
+- `12-note-lifecycle.md` - Note and hub lifecycle
+- `06-tagging-ontology.md` - Tagging system
+- `15-tags-and-hubs-interaction.md` - Tags vs hubs
+- `14-hierarchy-and-rhizomatic-structure.md` - Resolves folder vs rhizomatic tension
+- `20-processing-pipeline.md` - Complete processing pipeline
+
+### Safety and Boundaries
+- `note-editing-safety.md` - Editing rules
+- `contradiction-handling.md` - Handling contradictions
+- `16-system-scope-and-boundaries.md` - What belongs in archive
+- `19-error-handling.md` - Error handling
+
+### Maintenance and Evolution
+- `21-hub-maintenance-operations.md` - Hub maintenance
+- `22-versioning-and-compatibility.md` - Schema evolution
+- `automation-overview.md` - Automation rules
+- `automation-safety-checklist.md` - Safety checks
+
+### Reference
+- `18-user-interaction-model.md` - How users interact
+- `23-test-plan.md` - Testing and validation
+- `hub-promotion-criteria.md` - When to create hubs
+
+**If there is a conflict between any content and the specs, the specs take precedence.**
 
 ## Success Criteria
 
