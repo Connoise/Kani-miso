@@ -68,7 +68,7 @@ class TelegramBot:
             logger.error(f"Failed to send message: {e}")
             return None
 
-    def get_updates(self, timeout: int = 30):
+    def get_updates(self, timeout: int = 5):
         """Get updates from Telegram."""
         url = f"{self.base_url}/getUpdates"
         params = {
@@ -77,11 +77,15 @@ class TelegramBot:
         }
 
         try:
-            response = requests.get(url, params=params, timeout=timeout + 5)
+            response = requests.get(url, params=params, timeout=timeout + 2)
             response.raise_for_status()
             return response.json()
+        except KeyboardInterrupt:
+            raise
         except Exception as e:
-            logger.error(f"Failed to get updates: {e}")
+            # Don't log timeout errors, they're normal
+            if "timeout" not in str(e).lower():
+                logger.error(f"Failed to get updates: {e}")
             return None
 
     def parse_message(self, message_text: str) -> Dict[str, Any]:
@@ -96,22 +100,23 @@ class TelegramBot:
         """
         lines = message_text.strip().split('\n')
 
-        # Extract type from first line
+        # Extract type from first line (case-insensitive)
         first_line = lines[0] if lines else ""
         capture_type = "Thought"  # default
 
         type_patterns = {
-            'Thought:': 'Thought',
-            'Reflection:': 'Reflection',
-            'Question:': 'Question',
-            'Source:': 'Source',
-            'Quote:': 'Quote',
-            'Idea:': 'Idea',
-            'Log:': 'Log',
+            'thought:': 'Thought',
+            'reflection:': 'Reflection',
+            'question:': 'Question',
+            'source:': 'Source',
+            'quote:': 'Quote',
+            'idea:': 'Idea',
+            'log:': 'Log',
         }
 
+        first_line_lower = first_line.lower()
         for pattern, type_name in type_patterns.items():
-            if first_line.startswith(pattern):
+            if first_line_lower.startswith(pattern):
                 capture_type = type_name
                 # Remove the type prefix from first line
                 first_line = first_line[len(pattern):].strip()
@@ -135,11 +140,12 @@ class TelegramBot:
             if not line:
                 continue
 
-            # Check for context field
+            # Check for context field (case-insensitive)
             matched = False
+            line_lower = line.lower()
             for field in context_fields.keys():
-                pattern = f"{field.capitalize()}:"
-                if line.startswith(pattern):
+                pattern = f"{field}:"
+                if line_lower.startswith(pattern):
                     value = line[len(pattern):].strip()
                     context_fields[field] = value
                     matched = True

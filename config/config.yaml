@@ -13,10 +13,10 @@ processing:
   auto_push: false  # Require manual review before push
 
 claude:
-  model: "claude-sonnet-4-5-20250929"  # Claude Sonnet 4.5 - Latest, excellent quality
+  model: "claude-opus-4-5-20251101"  # Claude Opus 4.5 - Highest quality, best reasoning
   max_tokens: 4096
   temperature: 0.7  # Slightly creative but consistent
-  # Alternative: claude-opus-4-5-20251101 for highest quality (slower, more expensive)
+  # Alternative: claude-sonnet-4-5-20250929 for faster/cheaper (still excellent)
 
 git:
   commit_prefix: "process"  # Commit message prefix
