@@ -1,11 +1,12 @@
 """
 Archive Linter for Second Brain
-Validates archive integrity based on specs/19-error-handling.md
+Validates archive integrity based on specs/19-error-handling.md and specs/24-webpage-archival.md
 
 Usage:
     python lint.py                  # Run all checks
     python lint.py --hubs           # Check hubs only
     python lint.py --notes          # Check notes only
+    python lint.py --sources        # Check sources only
     python lint.py --links          # Check links only
     python lint.py --verbose        # Show all issues including info
 """
@@ -30,6 +31,7 @@ from utils.error_handling import (
     validate_filename_convention,
     validate_links,
     validate_required_sections,
+    validate_source_content,
     generate_lint_report,
 )
 from models.data_models import (
@@ -135,6 +137,11 @@ class ArchiveLinter:
                     section_errors = validate_required_sections(content, relative_path, entity_type)
                     errors.extend(section_errors)
 
+                    # Validate source content (from 24-webpage-archival.md)
+                    if entity_type == 'source':
+                        source_errors = validate_source_content(content, relative_path)
+                        errors.extend(source_errors)
+
                 except yaml.YAMLError:
                     pass  # Already caught in validate_frontmatter
 
@@ -221,6 +228,32 @@ class ArchiveLinter:
             info=info,
         )
 
+    def lint_sources(self) -> ValidationResult:
+        """
+        Lint only source files.
+
+        From 24-webpage-archival.md:
+        - Validate full content preservation
+        - Check for URL-only sources
+        - Validate metadata
+        """
+        all_errors: List[ValidationError] = []
+        all_files = self._get_all_files()
+
+        folder_errors = self.lint_folder('sources', all_files)
+        all_errors.extend(folder_errors)
+
+        critical_and_errors = [e for e in all_errors if e.severity in (ErrorSeverity.CRITICAL, ErrorSeverity.ERROR)]
+        warnings = [e for e in all_errors if e.severity == ErrorSeverity.WARNING]
+        info = [e for e in all_errors if e.severity == ErrorSeverity.INFO]
+
+        return ValidationResult(
+            valid=len(critical_and_errors) == 0,
+            errors=critical_and_errors,
+            warnings=warnings,
+            info=info,
+        )
+
     def check_broken_links(self) -> List[ValidationError]:
         """Check all files for broken links."""
         all_errors: List[ValidationError] = []
@@ -247,6 +280,7 @@ def main():
     parser = argparse.ArgumentParser(description="Archive Linter")
     parser.add_argument('--hubs', action='store_true', help='Check hubs only')
     parser.add_argument('--notes', action='store_true', help='Check notes only')
+    parser.add_argument('--sources', action='store_true', help='Check sources only')
     parser.add_argument('--links', action='store_true', help='Check links only')
     parser.add_argument('--verbose', '-v', action='store_true', help='Show all issues')
     args = parser.parse_args()
@@ -272,6 +306,12 @@ def main():
         print(generate_lint_report(all_issues))
     elif args.notes:
         result = linter.lint_notes()
+        all_issues = result.errors + result.warnings
+        if args.verbose:
+            all_issues += result.info
+        print(generate_lint_report(all_issues))
+    elif args.sources:
+        result = linter.lint_sources()
         all_issues = result.errors + result.warnings
         if args.verbose:
             all_issues += result.info

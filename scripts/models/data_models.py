@@ -1,6 +1,6 @@
 """
 Formal Data Models for Second Brain.
-Based on specs/13-formal-data-model.md
+Based on specs/13-formal-data-model.md and specs/24-webpage-archival.md
 
 This module defines all entity types, status values, and validation rules
 as specified in the formal data model specification.
@@ -69,13 +69,31 @@ class CaptureSurface(Enum):
 
 
 class SourceType(Enum):
-    """Valid source types."""
+    """Valid source types (from 24-webpage-archival.md)."""
     ARTICLE = "article"
+    BLOG = "blog"
     PDF = "pdf"
     BOOK = "book"
     VIDEO = "video"
     CONVERSATION = "conversation"
     WIKIPEDIA = "wikipedia"
+    ACADEMIC = "academic"
+    DOCUMENTATION = "documentation"
+    SOCIAL_MEDIA = "social_media"
+
+
+class ArchiveMethod(Enum):
+    """How the source was archived (from 24-webpage-archival.md)."""
+    AUTO = "auto"
+    MANUAL = "manual"
+    HYBRID = "hybrid"
+
+
+class ExtractionConfidence(Enum):
+    """Confidence level of content extraction (from 24-webpage-archival.md)."""
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
 
 
 class EntityType(Enum):
@@ -131,13 +149,25 @@ class HubFrontmatter:
 
 @dataclass
 class SourceFrontmatter:
-    """Frontmatter structure for sources (from 13-formal-data-model.md)."""
+    """
+    Frontmatter structure for sources.
+    Based on specs/13-formal-data-model.md and specs/24-webpage-archival.md.
+
+    Full content preservation is required - URLs are references, content is meaning.
+    """
     type: str = "source"
-    source_type: str = "article"
+    source_type: str = "article"  # article | blog | wikipedia | academic | documentation | social_media | pdf | book | video
     url: Optional[str] = None
-    author: Optional[str] = None
     captured_at: str = ""
+    title: Optional[str] = None  # Page title (from 24-webpage-archival.md)
+    domain: Optional[str] = None  # Domain extracted from URL (from 24-webpage-archival.md)
+    author: Optional[str] = None
+    published_at: Optional[str] = None  # Publication date if available (from 24-webpage-archival.md)
+    word_count: Optional[int] = None  # For quality validation (from 24-webpage-archival.md)
+    archive_method: Optional[str] = None  # auto | manual | hybrid (from 24-webpage-archival.md)
+    extraction_confidence: Optional[str] = None  # high | medium | low (from 24-webpage-archival.md)
     tags: List[str] = field(default_factory=list)
+    wikipedia_revision: Optional[str] = None  # For Wikipedia pages (from 24-webpage-archival.md)
 
 
 @dataclass
@@ -262,3 +292,122 @@ HUB_PROMOTION_MIN_CRITERIA = 2  # "Multiple" = at least 2 criteria
 HUB_PROMOTION_TAG_THRESHOLD = 5  # Tag appears in 5+ notes
 HUB_PROMOTION_DISCUSSION_THRESHOLD = 3  # Concept discussed in 3+ notes
 HUB_PROMOTION_MONTH_SPAN = 3  # Appears across 3+ months
+
+
+# =============================================================================
+# Web Archival Constants (from 24-webpage-archival.md)
+# =============================================================================
+
+# Quality thresholds
+SOURCE_MIN_WORD_COUNT = 100  # Minimum word count sanity check
+SOURCE_FETCH_TIMEOUT = 30  # Max seconds to wait for page fetch
+SOURCE_MAX_RETRIES = 3  # Retry count for network failures
+SOURCE_RETRY_DELAYS = [2, 4, 8]  # Exponential backoff delays (seconds)
+
+# Filename constraints
+SOURCE_SLUG_MAX_LENGTH = 60  # Maximum characters for source slug
+
+# Validation patterns
+URL_PATTERN = re.compile(
+    r'^https?://'  # http:// or https://
+    r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain
+    r'localhost|'  # localhost
+    r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # or IP
+    r'(?::\d+)?'  # optional port
+    r'(?:/?|[/?]\S+)$', re.IGNORECASE
+)
+
+
+# =============================================================================
+# Additional Validation Functions (from 24-webpage-archival.md)
+# =============================================================================
+
+def validate_source_type(source_type: str) -> bool:
+    """Check if source type is valid."""
+    try:
+        SourceType(source_type)
+        return True
+    except ValueError:
+        return False
+
+
+def validate_archive_method(method: str) -> bool:
+    """Check if archive method is valid."""
+    try:
+        ArchiveMethod(method)
+        return True
+    except ValueError:
+        return False
+
+
+def validate_extraction_confidence(confidence: str) -> bool:
+    """Check if extraction confidence level is valid."""
+    try:
+        ExtractionConfidence(confidence)
+        return True
+    except ValueError:
+        return False
+
+
+def validate_url(url: str) -> bool:
+    """Validate URL format."""
+    return bool(URL_PATTERN.match(url))
+
+
+def extract_domain_from_url(url: str) -> Optional[str]:
+    """Extract domain from URL."""
+    match = re.search(r'https?://(?:www\.)?([^/]+)', url)
+    if match:
+        return match.group(1)
+    return None
+
+
+def generate_source_slug(title: str, max_length: int = SOURCE_SLUG_MAX_LENGTH) -> str:
+    """
+    Generate a slug for source filename from title.
+
+    Rules from 24-webpage-archival.md:
+    - Lowercase, hyphen-separated
+    - No special characters
+    - Maximum 60 characters
+    """
+    # Convert to lowercase
+    slug = title.lower()
+    # Replace spaces and underscores with hyphens
+    slug = re.sub(r'[\s_]+', '-', slug)
+    # Remove special characters
+    slug = re.sub(r'[^a-z0-9-]', '', slug)
+    # Remove multiple consecutive hyphens
+    slug = re.sub(r'-+', '-', slug)
+    # Remove leading/trailing hyphens
+    slug = slug.strip('-')
+    # Truncate to max length
+    if len(slug) > max_length:
+        slug = slug[:max_length].rstrip('-')
+    return slug or 'untitled'
+
+
+def infer_source_type_from_url(url: str) -> SourceType:
+    """
+    Attempt to infer source type from URL.
+
+    From 24-webpage-archival.md.
+    """
+    url_lower = url.lower()
+
+    if 'wikipedia.org' in url_lower:
+        return SourceType.WIKIPEDIA
+    elif 'arxiv.org' in url_lower or 'doi.org' in url_lower or 'scholar.google' in url_lower:
+        return SourceType.ACADEMIC
+    elif 'medium.com' in url_lower or 'substack.com' in url_lower or 'ghost.io' in url_lower:
+        return SourceType.BLOG
+    elif 'twitter.com' in url_lower or 'x.com' in url_lower or 'reddit.com' in url_lower:
+        return SourceType.SOCIAL_MEDIA
+    elif 'youtube.com' in url_lower or 'vimeo.com' in url_lower:
+        return SourceType.VIDEO
+    elif 'docs.' in url_lower or 'documentation' in url_lower or 'readthedocs' in url_lower:
+        return SourceType.DOCUMENTATION
+    elif url_lower.endswith('.pdf'):
+        return SourceType.PDF
+    else:
+        return SourceType.ARTICLE

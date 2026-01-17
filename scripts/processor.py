@@ -5,6 +5,7 @@ Orchestrates the processing of queued captures.
 Based on specs:
 - 20-processing-pipeline.md
 - 19-error-handling.md
+- 24-webpage-archival.md
 """
 
 import sys
@@ -23,8 +24,9 @@ from queue_manager import QueueManager
 from processors.claude_client import ClaudeClient
 from processors.file_writer import FileWriter
 from processors.git_manager import GitManager
+from processors.web_archiver import WebArchiver
 from utils.logger import setup_logger
-from models.data_models import CertaintyLevel, NoteStatus
+from models.data_models import CertaintyLevel, NoteStatus, validate_url
 
 # Load environment variables
 load_dotenv(Path(__file__).parent.parent / "config" / ".env")
@@ -99,7 +101,85 @@ class Processor:
         else:
             self.git = None
 
+        # Web archiver (from 24-webpage-archival.md)
+        self.web_archiver = WebArchiver(self.repo_root)
+
         logger.info("All components initialized")
+
+    # =========================================================================
+    # URL Detection and Processing (from 24-webpage-archival.md)
+    # =========================================================================
+
+    def _is_url_capture(self, capture: Dict[str, Any]) -> bool:
+        """
+        Detect if a capture is primarily a URL to archive.
+
+        From 24-webpage-archival.md:
+        - User sends URL -> Archive full content
+        """
+        body = capture.get('body', '').strip()
+
+        # Check if body is primarily a URL
+        # URL pattern at start of message
+        url_match = re.match(r'^(https?://\S+)', body)
+        if url_match:
+            url = url_match.group(1)
+            # If body is just the URL or URL followed by short comment
+            remaining = body[len(url):].strip()
+            if len(remaining) < 100:  # Short comment is OK
+                return validate_url(url)
+
+        return False
+
+    def _extract_url_from_capture(self, capture: Dict[str, Any]) -> tuple:
+        """
+        Extract URL and optional comment from capture.
+
+        Returns:
+            (url, comment) tuple
+        """
+        body = capture.get('body', '').strip()
+        url_match = re.match(r'^(https?://\S+)\s*(.*)', body, re.DOTALL)
+
+        if url_match:
+            url = url_match.group(1)
+            comment = url_match.group(2).strip()
+            return url, comment if comment else None
+
+        return None, None
+
+    def _process_url_capture(self, capture: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process a URL capture by archiving the webpage.
+
+        From 24-webpage-archival.md:
+        - Fetch page content
+        - Extract main content
+        - Convert to markdown
+        - Store in /sources/
+
+        Returns:
+            Dict with success status and file path or error
+        """
+        url, comment = self._extract_url_from_capture(capture)
+
+        if not url:
+            return {'success': False, 'error': 'No URL found in capture'}
+
+        logger.info(f"Archiving URL: {url}")
+
+        # Archive the URL
+        result = self.web_archiver.archive_url(url, user_summary=comment)
+
+        if result['success']:
+            logger.info(f"  Archived: {result['file_path'].name} ({result['word_count']} words)")
+            if result.get('warnings'):
+                for w in result['warnings']:
+                    logger.warning(f"  Warning: {w}")
+        else:
+            logger.error(f"  Archive failed: {result['error']}")
+
+        return result
 
     # =========================================================================
     # Context Encoding (from 20-processing-pipeline.md)
@@ -228,6 +308,22 @@ class Processor:
             try:
                 # Mark as processing
                 self.queue.mark_processing(capture['id'])
+
+                # Check if this is a URL capture (from 24-webpage-archival.md)
+                if self._is_url_capture(capture):
+                    logger.info(f"Processing URL capture {capture['id']}")
+                    result = self._process_url_capture(capture)
+
+                    if result['success']:
+                        file_path = result['file_path']
+                        processed_files.append(file_path)
+                        note_type_counts['Source'] += 1
+                        relative_path = str(file_path.relative_to(self.repo_root))
+                        self.queue.mark_completed(capture['id'], relative_path)
+                    else:
+                        raise Exception(result['error'])
+
+                    continue
 
                 # Stage 2: Context Encoding (from 20-processing-pipeline.md)
                 enriched_capture = self._encode_context(capture)

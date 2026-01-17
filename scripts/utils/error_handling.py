@@ -1,6 +1,6 @@
 """
 Error Handling for Second Brain.
-Based on specs/19-error-handling.md
+Based on specs/19-error-handling.md and specs/24-webpage-archival.md
 
 Core principle: Preserve over perfect.
 - Keep malformed content rather than deleting
@@ -48,6 +48,11 @@ class ErrorCategory(Enum):
     STORAGE = "storage"
     DUPLICATE_SLUG = "duplicate_slug"
     ENCODING = "encoding"
+    # Web capture categories (from 24-webpage-archival.md)
+    FETCH_FAILURE = "fetch_failure"
+    EXTRACTION_FAILURE = "extraction_failure"
+    LOW_CONFIDENCE = "low_confidence"
+    URL_ONLY = "url_only"  # Source has URL but no content
 
 
 # =============================================================================
@@ -404,6 +409,94 @@ def try_infer_metadata(file_path: Path, frontmatter: Dict[str, Any]) -> Dict[str
 # =============================================================================
 # Error Reporting
 # =============================================================================
+
+# =============================================================================
+# Source Validation (from 24-webpage-archival.md)
+# =============================================================================
+
+def validate_source_content(content: str, file_path: str) -> List[ValidationError]:
+    """
+    Validate source file has proper content.
+
+    From 24-webpage-archival.md:
+    - Full content preservation required
+    - URL-only sources are flagged
+    - Low word count is a warning
+    """
+    from models.data_models import SOURCE_MIN_WORD_COUNT
+
+    errors = []
+
+    # Parse frontmatter
+    if not content.startswith('---'):
+        return errors
+
+    parts = content.split('---', 2)
+    if len(parts) < 3:
+        return errors
+
+    try:
+        fm = yaml.safe_load(parts[1])
+        body = parts[2]
+    except yaml.YAMLError:
+        return errors
+
+    if not fm or fm.get('type') != 'source':
+        return errors
+
+    # Check word count
+    word_count = fm.get('word_count', 0)
+    body_words = len(body.split())
+
+    if word_count == 0 and body_words < SOURCE_MIN_WORD_COUNT:
+        errors.append(ValidationError(
+            file_path=file_path,
+            category=ErrorCategory.URL_ONLY,
+            severity=ErrorSeverity.WARNING,
+            message=f"Source has only {body_words} words - content may not be fully archived",
+            suggestion="Re-archive source or add manual summary"
+        ))
+
+    if 0 < word_count < SOURCE_MIN_WORD_COUNT:
+        errors.append(ValidationError(
+            file_path=file_path,
+            category=ErrorCategory.LOW_CONFIDENCE,
+            severity=ErrorSeverity.INFO,
+            message=f"Low word count ({word_count}) - verify content is complete",
+            suggestion="Review source file for extraction issues"
+        ))
+
+    # Check extraction confidence
+    if fm.get('extraction_confidence') == 'low':
+        errors.append(ValidationError(
+            file_path=file_path,
+            category=ErrorCategory.LOW_CONFIDENCE,
+            severity=ErrorSeverity.WARNING,
+            message="Source was archived with low confidence",
+            suggestion="Review and manually verify content quality"
+        ))
+
+    # Check required metadata
+    if not fm.get('url'):
+        errors.append(ValidationError(
+            file_path=file_path,
+            category=ErrorCategory.MISSING_FIELD,
+            severity=ErrorSeverity.WARNING,
+            message="Source missing original URL",
+            suggestion="Add url field to frontmatter"
+        ))
+
+    if not fm.get('title'):
+        errors.append(ValidationError(
+            file_path=file_path,
+            category=ErrorCategory.MISSING_FIELD,
+            severity=ErrorSeverity.INFO,
+            message="Source missing title",
+            suggestion="Add title field to frontmatter"
+        ))
+
+    return errors
+
 
 def generate_lint_report(errors: List[ValidationError]) -> str:
     """Generate a human-readable lint report."""
