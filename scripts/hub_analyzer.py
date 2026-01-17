@@ -34,6 +34,13 @@ class HubAnalyzer:
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
 
+        # Initialize notes root (can be different from repo root)
+        notes_root_config = self.config.get('notes_root', '.')
+        if notes_root_config == '.' or not notes_root_config:
+            self.notes_root = self.repo_root
+        else:
+            self.notes_root = Path(notes_root_config)
+
         # Initialize Claude client
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
@@ -49,10 +56,12 @@ class HubAnalyzer:
         self.existing_hubs = self._load_existing_hubs()
 
         logger.info(f"Hub Analyzer initialized with {len(self.existing_hubs)} existing hubs")
+        if self.notes_root != self.repo_root:
+            logger.info(f"Notes location: {self.notes_root}")
 
     def _load_existing_hubs(self) -> List[str]:
         """Load list of existing hub names."""
-        hubs_dir = self.repo_root / "hubs"
+        hubs_dir = self.notes_root / "hubs"
         if not hubs_dir.exists():
             return []
 
@@ -68,7 +77,7 @@ class HubAnalyzer:
         notes = []
 
         for folder_name in self.note_folders:
-            folder = self.repo_root / folder_name
+            folder = self.notes_root / folder_name
             if not folder.exists():
                 continue
 
@@ -76,7 +85,7 @@ class HubAnalyzer:
                 try:
                     content = file.read_text(encoding='utf-8')
                     notes.append({
-                        'path': str(file.relative_to(self.repo_root)),
+                        'path': str(file.relative_to(self.notes_root)),
                         'filename': file.name,
                         'folder': folder_name,
                         'content': content,
@@ -267,7 +276,7 @@ Only suggest hubs with 3+ related notes. Be conservative."""
 
     def create_hub(self, hub_name: str) -> Path:
         """Create a hub stub following the spec."""
-        hubs_dir = self.repo_root / "hubs"
+        hubs_dir = self.notes_root / "hubs"
         hubs_dir.mkdir(exist_ok=True)
 
         hub_path = hubs_dir / f"{hub_name}.md"
@@ -319,7 +328,7 @@ This hub does not assert a single definition or viewpoint.
         updated = []
 
         for note_path in note_paths:
-            full_path = self.repo_root / note_path
+            full_path = self.notes_root / note_path
 
             if not full_path.exists():
                 logger.warning(f"Note not found: {note_path}")

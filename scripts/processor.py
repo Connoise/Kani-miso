@@ -44,6 +44,15 @@ class Processor:
         # Initialize repo root
         self.repo_root = Path(__file__).parent.parent
 
+        # Initialize notes root (can be different from repo root)
+        notes_root_config = self.config.get('notes_root', '.')
+        if notes_root_config == '.' or not notes_root_config:
+            self.notes_root = self.repo_root
+        else:
+            self.notes_root = Path(notes_root_config)
+            # Create notes root if it doesn't exist
+            self.notes_root.mkdir(parents=True, exist_ok=True)
+
         # Setup logger with config
         global logger
         logger = setup_logger(
@@ -76,22 +85,30 @@ class Processor:
             temperature=self.config['claude']['temperature'],
         )
 
-        # File writer
+        # File writer (notes go to notes_root, which may differ from repo_root)
         self.file_writer = FileWriter(
             self.repo_root,
             self.config['folders'],
+            notes_root=self.notes_root,
         )
 
-        # Git manager (only if auto_commit enabled)
+        # Git manager (only if auto_commit enabled and notes are in repo)
         if self.config['processing']['auto_commit']:
-            self.git = GitManager(
-                self.repo_root,
-                auto_push=self.config['processing']['auto_push'],
-            )
+            if self.notes_root != self.repo_root:
+                logger.warning("Git auto-commit disabled: notes are stored outside the repository")
+                logger.info("To enable git tracking, initialize a git repo in your notes directory")
+                self.git = None
+            else:
+                self.git = GitManager(
+                    self.repo_root,
+                    auto_push=self.config['processing']['auto_push'],
+                )
         else:
             self.git = None
 
         logger.info("All components initialized")
+        if self.notes_root != self.repo_root:
+            logger.info(f"Notes storage: {self.notes_root}")
 
     def process_batch(self, limit: int = None) -> Dict[str, Any]:
         """

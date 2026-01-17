@@ -19,20 +19,26 @@ logger = setup_logger(__name__)
 class FileWriter:
     """Handles writing processed captures to markdown files."""
 
-    def __init__(self, repo_root: Path, folders: Dict[str, str]):
+    def __init__(self, repo_root: Path, folders: Dict[str, str], notes_root: Path = None):
         """
         Initialize file writer.
 
         Args:
-            repo_root: Path to repository root
+            repo_root: Path to repository root (for specs, config, etc.)
             folders: Dictionary mapping note types to folder names
+            notes_root: Path to notes storage directory (defaults to repo_root)
+                       Set to a different path to store notes separately from the repo
         """
         self.repo_root = Path(repo_root)
+        self.notes_root = Path(notes_root) if notes_root else self.repo_root
         self.folders = folders
 
-        # Ensure folders exist
+        # Ensure folders exist in notes_root
         for folder in self.folders.values():
-            (self.repo_root / folder).mkdir(parents=True, exist_ok=True)
+            (self.notes_root / folder).mkdir(parents=True, exist_ok=True)
+
+        if self.notes_root != self.repo_root:
+            logger.info(f"Notes will be saved to: {self.notes_root}")
 
     def get_destination_folder(self, note_type: str) -> Path:
         """
@@ -42,7 +48,7 @@ class FileWriter:
             note_type: Type of note (Thought, Reflection, Source, etc.)
 
         Returns:
-            Path to destination folder
+            Path to destination folder (in notes_root directory)
         """
         type_to_folder = {
             'Thought': self.folders['notes'],
@@ -55,7 +61,7 @@ class FileWriter:
         }
 
         folder_name = type_to_folder.get(note_type, self.folders['inbox'])
-        return self.repo_root / folder_name
+        return self.notes_root / folder_name
 
     def extract_title_from_markdown(self, markdown_content: str) -> str:
         """
@@ -134,12 +140,12 @@ class FileWriter:
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(markdown_content)
 
-        logger.info(f"Wrote note: {file_path.relative_to(self.repo_root)}")
+        logger.info(f"Wrote note: {file_path.relative_to(self.notes_root)}")
         return file_path
 
     def get_relative_path(self, file_path: Path) -> str:
         """
-        Get path relative to repo root.
+        Get path relative to notes root.
 
         Args:
             file_path: Absolute file path
@@ -147,4 +153,4 @@ class FileWriter:
         Returns:
             Relative path string
         """
-        return str(file_path.relative_to(self.repo_root))
+        return str(file_path.relative_to(self.notes_root))

@@ -2,6 +2,12 @@
 # This file is tracked in Git - NO SECRETS HERE
 # Put secrets in config/.env (gitignored)
 
+# Notes Storage Configuration
+# Set notes_root to a different directory to store notes separately from the GitHub repo
+# Example: "C:/Users/YourName/Documents/SecondBrainNotes"
+# Leave as "." to use the repository root (default behavior)
+notes_root: "C:\Users\gilli\Desktop\Connor Work\Obsidian Notes"
+
 telegram:
   enabled: true
   queue_type: "sqlite"  # Queue storage method
