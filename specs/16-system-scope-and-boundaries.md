@@ -26,9 +26,10 @@ This document defines what belongs in the archive system, what does not, and why
 - Shifting perspectives over time
 
 **4. External Material Integration**
-- Articles, books, videos that prompted thought
-- Wikipedia entries that provided context
+- Articles, books, videos that prompted thought (preserve full content when possible)
+- Wikipedia entries that provided context (archive complete article)
 - Conversations that sparked ideas
+- Note: External content should be archived completely in `/sources/`, not just referenced by URL
 
 **5. Active Inquiry Lines**
 - Questions being pursued
@@ -120,14 +121,19 @@ This document defines what belongs in the archive system, what does not, and why
 ---
 
 **4. Other People's Content Without Your Response**
-- Raw article copies with no commentary
-- Bookmark dumps
+- Bookmark dumps without reading
 - Screenshot archives without context
-- Saved links without notes
+- Links saved compulsively without engagement
 
 **Why**: External material only matters when it intersects with your thinking.
 
-**Exception**: If you capture something for future reference, add minimal context: "found this because I was thinking about X."
+**IMPORTANT CLARIFICATION**: When you DO capture external content (articles, essays, papers), the full content should be preserved in `/sources/`, not just the URL. This prevents information loss due to link rot and ensures long-term archive integrity. See `specs/24-webpage-archival.md`.
+
+**Distinction**:
+- **Capture WITH engagement**: Article → Read → Archive full content in `/sources/` → Optionally create response note in `/notes/`
+- **Capture WITHOUT engagement**: Mindless bookmarking → Don't archive
+
+**Exception**: If you capture something for future reference, add minimal context: "found this because I was thinking about X" and archive the full content.
 
 ---
 

@@ -102,7 +102,7 @@ note_count: integer (optional, for tooling)
 
 ### 3. Source (External Entity)
 
-**Definition**: External material imported into the archive.
+**Definition**: External material imported into the archive with full content preservation.
 
 **File Location**: `/sources/`
 
@@ -112,15 +112,32 @@ note_count: integer (optional, for tooling)
 ```yaml
 ---
 type: source
-source_type: article | pdf | book | video | conversation | wikipedia
-url: string (if applicable)
-author: string (optional)
+source_type: article | blog | wikipedia | academic | documentation | social_media | pdf | book | video | conversation
+url: string (original URL if applicable)
 captured_at: ISO-8601 datetime
-tags: [list of tags]
+title: string (page/article title)
+domain: string (source domain)
+author: string (optional)
+published_at: ISO-8601 date (optional, publication date)
+word_count: integer (optional)
+archive_method: auto | manual | hybrid (optional)
+extraction_confidence: high | medium | low (optional)
+tags: [list of tags] (optional)
 ---
 ```
 
+**Content Preservation**:
+- Full content MUST be preserved in markdown format
+- Original URL preserved in frontmatter for reference
+- Prevents information loss due to link rot
+- Content extraction should remove navigation, ads, sidebars
+- Main article content should be clean and readable
+
 **Immutability**: Sources are immutable after initial capture
+
+**Archival Principle**: Sources store complete external material, not just references. This ensures the archive remains meaningful even if external sources disappear.
+
+**Further details**: See `specs/24-webpage-archival.md` for complete webpage archival specification
 
 ---
 

@@ -61,10 +61,17 @@ Raw Capture → Context Encoding → Interpretation → Linking → Structured N
 **For Link Captures**:
 ```
 1. Receive URL
-2. Fetch page content
-3. Convert HTML to markdown
-4. Store in /sources/ with source_type: article
-5. Preserve original URL in metadata
+2. Fetch page content via HTTP
+3. Extract main content (remove navigation, ads, sidebars)
+4. Convert HTML to clean markdown
+5. Extract metadata (author, title, publication date)
+6. Store FULL CONTENT in /sources/ with source_type: article
+7. Preserve original URL in metadata
+8. Commit to git
+
+IMPORTANT: Full content must be preserved, not just the URL.
+This prevents information loss due to link rot.
+See specs/24-webpage-archival.md for complete details.
 ```
 
 ### Output

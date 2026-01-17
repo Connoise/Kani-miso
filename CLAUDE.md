@@ -34,7 +34,7 @@ Do not treat them interchangeably.
 - `/notes/` — Time-bound processed notes
 - `/reflections/` — Diary-style, emotional, subjective notes
 - `/hubs/` — Long-lived conceptual gathering places
-- `/sources/` — External materials (articles, PDFs, Wikipedia)
+- `/sources/` — External materials with full content archived (articles, PDFs, Wikipedia)
 - `/projects/` — Active lines of inquiry or creation (temporary lenses)
 - `/archive/` — Frozen snapshots of thinking
 
@@ -186,6 +186,7 @@ When processing captures, include:
 - `15-tags-and-hubs-interaction.md` - Tags vs hubs
 - `14-hierarchy-and-rhizomatic-structure.md` - Resolves folder vs rhizomatic tension
 - `20-processing-pipeline.md` - Complete processing pipeline
+- `24-webpage-archival.md` - **External content preservation**
 
 ### Safety and Boundaries
 - `note-editing-safety.md` - Editing rules

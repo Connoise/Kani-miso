@@ -38,4 +38,4 @@ The primary organizational action is **linking**, not categorization.
 - Forcing every note to attach to a hub
 - Suggesting hub links when concept is merely mentioned in passing
 
-**Further reading**: See `specs/13-formal-data-model.md` for complete data model and `specs/20-processing-pipeline.md` for detailed pipeline architecture.
+**Further reading**: See `specs/13-formal-data-model.md` for complete data model, `specs/20-processing-pipeline.md` for detailed pipeline architecture, and `specs/24-webpage-archival.md` for external content preservation.
