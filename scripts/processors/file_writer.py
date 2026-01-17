@@ -1,17 +1,26 @@
 """
 File Writer for Second Brain
 Handles creation and writing of markdown files.
+
+Based on specs:
+- 13-formal-data-model.md
+- 19-error-handling.md
 """
 
 import re
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 from utils.logger import setup_logger
 from utils.slugify import create_slug
+from models.data_models import (
+    validate_note_filename,
+    NoteStatus,
+    EntityType,
+)
 
 logger = setup_logger(__name__)
 
@@ -122,12 +131,17 @@ class FileWriter:
         filename = self.generate_filename(captured_at, title)
         file_path = dest_folder / filename
 
-        # Check for conflicts
+        # Check for conflicts (from 19-error-handling.md - Duplicate Slugs)
+        # Second file gets slug suffix: thought-2.md
         if file_path.exists():
-            # Append timestamp to make unique
-            timestamp = datetime.now().strftime("%H%M%S")
+            counter = 2
             base = file_path.stem
-            file_path = dest_folder / f"{base}-{timestamp}.md"
+            while True:
+                new_filename = f"{base}-{counter}.md"
+                file_path = dest_folder / new_filename
+                if not file_path.exists():
+                    break
+                counter += 1
             logger.warning(f"File exists, using: {file_path.name}")
 
         # Write file

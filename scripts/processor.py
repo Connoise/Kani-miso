@@ -1,11 +1,18 @@
 """
 Main Processor for Second Brain
 Orchestrates the processing of queued captures.
+
+Based on specs:
+- 20-processing-pipeline.md
+- 19-error-handling.md
 """
 
 import sys
+import re
 from pathlib import Path
 from collections import defaultdict
+from typing import Dict, Any, Optional, List
+from datetime import datetime
 import yaml
 from dotenv import load_dotenv
 
@@ -17,6 +24,7 @@ from processors.claude_client import ClaudeClient
 from processors.file_writer import FileWriter
 from processors.git_manager import GitManager
 from utils.logger import setup_logger
+from models.data_models import CertaintyLevel, NoteStatus
 
 # Load environment variables
 load_dotenv(Path(__file__).parent.parent / "config" / ".env")
@@ -93,6 +101,99 @@ class Processor:
 
         logger.info("All components initialized")
 
+    # =========================================================================
+    # Context Encoding (from 20-processing-pipeline.md)
+    # =========================================================================
+
+    def _encode_context(self, capture: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Stage 2: Context Encoding
+
+        From 20-processing-pipeline.md:
+        - Infer missing fields
+        - Add certainty level (if detectable)
+        - Detect emotional context (if explicit)
+        """
+        enriched = capture.copy()
+
+        # Infer captured_from if missing
+        if not enriched.get('captured_from') or enriched.get('captured_from') == 'unknown':
+            if enriched.get('telegram_message_id'):
+                enriched['captured_from'] = 'telegram'
+
+        # Add processing timestamp
+        enriched['processed_at'] = datetime.now().isoformat()
+
+        # Detect certainty level from text
+        body = enriched.get('body', '')
+        certainty = self._detect_certainty(body)
+        if certainty and not enriched.get('confidence'):
+            enriched['confidence'] = certainty
+
+        # Detect emotional context (if explicit)
+        emotional_context = self._detect_emotional_context(body)
+        if emotional_context and not enriched.get('mood'):
+            enriched['emotional_context'] = emotional_context
+
+        return enriched
+
+    def _detect_certainty(self, text: str) -> Optional[str]:
+        """
+        Detect certainty level from uncertainty markers in text.
+
+        From 20-processing-pipeline.md: Check for "maybe", "possibly", "not sure"
+        """
+        text_lower = text.lower()
+
+        # High uncertainty markers
+        uncertainty_markers = [
+            'maybe', 'possibly', 'not sure', "i don't know",
+            'uncertain', 'might be', 'could be', 'perhaps',
+            'i think', 'i guess', 'probably not', 'hard to say'
+        ]
+
+        # High certainty markers
+        certainty_markers = [
+            'definitely', 'certainly', 'absolutely', 'clearly',
+            'obviously', "i'm sure", 'without doubt', 'for certain'
+        ]
+
+        uncertainty_count = sum(1 for marker in uncertainty_markers if marker in text_lower)
+        certainty_count = sum(1 for marker in certainty_markers if marker in text_lower)
+
+        if uncertainty_count > certainty_count and uncertainty_count >= 1:
+            return CertaintyLevel.LOW.value
+        elif certainty_count > uncertainty_count and certainty_count >= 1:
+            return CertaintyLevel.HIGH.value
+
+        return None
+
+    def _detect_emotional_context(self, text: str) -> Optional[str]:
+        """
+        Detect emotional context if explicitly stated.
+
+        From 20-processing-pipeline.md: Check for "I'm feeling", "I feel"
+        """
+        text_lower = text.lower()
+
+        # Explicit emotion patterns
+        patterns = [
+            r"i(?:'m| am) feeling (\w+)",
+            r"i feel (\w+)",
+            r"feeling (\w+) (?:today|right now|lately)",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                emotion = match.group(1)
+                # Filter out non-emotional words
+                non_emotions = ['like', 'that', 'this', 'it', 'so']
+                if emotion not in non_emotions:
+                    return emotion
+
+        return None
+
     def process_batch(self, limit: int = None) -> Dict[str, Any]:
         """
         Process a batch of pending captures.
@@ -128,9 +229,17 @@ class Processor:
                 # Mark as processing
                 self.queue.mark_processing(capture['id'])
 
-                # Process with Claude
+                # Stage 2: Context Encoding (from 20-processing-pipeline.md)
+                enriched_capture = self._encode_context(capture)
+
+                # Process with Claude (Stage 3: Interpretation)
                 logger.info(f"Processing capture {capture['id']} ({capture['type']})")
-                markdown = self.claude.process_telegram_capture(capture, specs_dir)
+                if enriched_capture.get('confidence'):
+                    logger.info(f"  Detected certainty: {enriched_capture['confidence']}")
+                if enriched_capture.get('emotional_context'):
+                    logger.info(f"  Detected emotional context: {enriched_capture['emotional_context']}")
+
+                markdown = self.claude.process_telegram_capture(enriched_capture, specs_dir)
 
                 # Write to file
                 file_path = self.file_writer.write_note(markdown, capture)
