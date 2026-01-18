@@ -6,7 +6,7 @@
 # Set notes_root to a different directory to store notes separately from the GitHub repo
 # Example: "C:/Users/YourName/Documents/SecondBrainNotes"
 # Leave as "." to use the repository root (default behavior)
-notes_root: "C:\Users\gilli\Desktop\Connor Work\Obsidian Notes"
+notes_root: "C:/Users/gilli/Desktop/Connor Work/Obsidian Notes"
 
 telegram:
   enabled: true
