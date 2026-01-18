@@ -13,6 +13,13 @@ telegram:
   queue_type: "sqlite"  # Queue storage method
   default_surface: "mobile"  # Assume mobile unless specified
 
+twitter:
+  enabled: true
+  default_type: "Tweet"  # Note type for tweets
+  include_replies: true  # Include reply tweets
+  include_retweets: true  # Include retweets
+  max_tweets_per_sync: 10  # Max tweets to fetch per sync
+
 processing:
   batch_size: 50  # Max items to process in one run
   auto_commit: true  # Create git commits automatically
@@ -34,6 +41,7 @@ folders:
   sources: "sources"
   inbox: "inbox"
   hubs: "hubs"
+  tweets: "tweets"
 
 logging:
   level: "INFO"  # DEBUG, INFO, WARNING, ERROR

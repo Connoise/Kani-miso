@@ -112,6 +112,7 @@ class TelegramBot:
             'quote:': 'Quote',
             'idea:': 'Idea',
             'log:': 'Log',
+            'tweet:': 'Tweet',
         }
 
         first_line_lower = first_line.lower()
