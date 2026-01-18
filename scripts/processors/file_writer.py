@@ -58,6 +58,7 @@ class FileWriter:
             'Log': self.folders['notes'],
             'Idea': self.folders['notes'],
             'Quote': self.folders['notes'],
+            'Tweet': self.folders.get('tweets', 'tweets'),
         }
 
         folder_name = type_to_folder.get(note_type, self.folders['inbox'])

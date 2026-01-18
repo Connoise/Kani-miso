@@ -44,6 +44,7 @@ The first line of a message should start with one of the following prefixes:
 - `Quote:`
 - `Idea:`
 - `Log:`
+- `Tweet:` (auto-forwarded from Twitter/X)
 - `Task:` (optional; use only if you want actionable items)
 
 If no prefix is used, the processor should treat the message as `Thought:`.
