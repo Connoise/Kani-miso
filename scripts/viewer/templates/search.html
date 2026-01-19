@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Search - Second Brain Viewer{% endblock %}
+
+{% block content %}
+<div class="search-container">
+    <h1>Search</h1>
+
+    <form method="get" action="/search" class="search-form">
+        <input type="text" name="q" value="{{ query }}" placeholder="Search notes..." class="search-input" autofocus>
+        <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+
+    {% if query %}
+    <div class="search-results">
+        <p class="results-count">Found {{ results|length }} results for "{{ query }}"</p>
+
+        {% for result in results %}
+        <div class="search-result">
+            <h3>
+                <a href="/note/{{ result.path }}">{{ result.title }}</a>
+                <span class="badge badge-{{ result.type }}">{{ result.type }}</span>
+                {% if result.path.startswith('archive/') %}
+                <span class="badge badge-archived">ARCHIVED</span>
+                {% endif %}
+            </h3>
+            <span class="result-date">{{ result.created_at|format_date }}</span>
+            <p class="result-snippet">{{ result.snippet|safe }}</p>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

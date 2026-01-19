@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Second Brain Viewer{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static_files', filename='css/style.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-content">
+            <a href="/" class="nav-brand">Second Brain</a>
+            <div class="nav-links">
+                <a href="/timeline" class="nav-link">Timeline</a>
+                <a href="/hubs" class="nav-link">Hubs</a>
+                <a href="/projects" class="nav-link">Projects</a>
+                <a href="/sources" class="nav-link">Sources</a>
+                <a href="/graph" class="nav-link">Graph</a>
+                <a href="/search" class="nav-link">Search</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <p>Second Brain Viewer - Read-only interface</p>
+    </footer>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

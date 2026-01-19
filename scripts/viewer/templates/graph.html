@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Graph - Second Brain Viewer{% endblock %}
+
+{% block extra_head %}
+<script src="https://d3js.org/d3.v7.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="graph-container">
+    <h1>Knowledge Graph</h1>
+
+    <div class="graph-controls">
+        <button id="reset-zoom" class="btn btn-secondary">Reset View</button>
+        <label>
+            Filter:
+            <select id="filter-type">
+                <option value="">All</option>
+                <option value="hub">Hubs only</option>
+                <option value="note">Notes only</option>
+            </select>
+        </label>
+    </div>
+
+    <div id="graph" class="graph-svg"></div>
+    <div id="graph-warning" class="warning" style="display: none;"></div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static_files', filename='js/graph.js') }}"></script>
+<script>
+    // Initialize graph
+    initGraph('graph', '/api/graph');
+</script>
+{% endblock %}
