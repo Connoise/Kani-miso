@@ -23,7 +23,14 @@ def create_app(vault_path: Path, config: dict = None):
     Returns:
         Flask app instance
     """
-    app = Flask(__name__)
+    # Get the directory where this module is located
+    module_dir = Path(__file__).parent
+    template_folder = module_dir / 'templates'
+    static_folder = module_dir / 'static'
+
+    app = Flask(__name__,
+                template_folder=str(template_folder),
+                static_folder=str(static_folder))
     app.config['VAULT_PATH'] = vault_path
     app.config['VAULT_NAME'] = config.get('vault', {}).get('name', 'My Vault') if config else 'My Vault'
 
@@ -235,11 +242,6 @@ def create_app(vault_path: Path, config: dict = None):
             results = search_notes(get_db(), query, limit=50)
 
         return render_template('search.html', query=query, results=results)
-
-    @app.route('/static/<path:filename>')
-    def static_files(filename):
-        """Serve static files."""
-        return send_from_directory('static', filename)
 
     @app.template_filter('format_date')
     def format_date(date_str):
