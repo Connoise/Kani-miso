@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}{{ hub_name }} - Hub{% endblock %}
+
+{% block content %}
+<div class="hub-detail">
+    <div class="hub-header">
+        <h1>{{ hub_name }}</h1>
+        <span class="status-badge status-{{ frontmatter.status }}">{{ frontmatter.status }}</span>
+        <span class="note-count">{{ groups.this_week|length + groups.this_month|length + groups.older|length }} linked notes</span>
+    </div>
+
+    <div class="hub-content">
+        {{ content_html|safe }}
+    </div>
+
+    <div class="hub-notes">
+        <h2>Linked Notes</h2>
+
+        {% if groups.this_week %}
+        <div class="note-group">
+            <h3>This Week ({{ groups.this_week|length }})</h3>
+            <ul class="note-list">
+                {% for note in groups.this_week %}
+                <li>
+                    <a href="/note/{{ note.path }}">{{ note.title }}</a>
+                    <span class="note-date">{{ note.created_at|format_date }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if groups.this_month %}
+        <div class="note-group">
+            <h3>This Month ({{ groups.this_month|length }})</h3>
+            <ul class="note-list">
+                {% for note in groups.this_month %}
+                <li>
+                    <a href="/note/{{ note.path }}">{{ note.title }}</a>
+                    <span class="note-date">{{ note.created_at|format_date }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if groups.older %}
+        <div class="note-group">
+            <h3>Older ({{ groups.older|length }})</h3>
+            <ul class="note-list {% if groups.older|length > 20 %}collapsed{% endif %}">
+                {% for note in groups.older %}
+                <li>
+                    <a href="/note/{{ note.path }}">{{ note.title }}</a>
+                    <span class="note-date">{{ note.created_at|format_date }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% if groups.older|length > 20 %}
+            <button class="btn btn-secondary" onclick="this.previousElementSibling.classList.toggle('collapsed')">
+                Show all
+            </button>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    {% if related_hubs %}
+    <div class="related-hubs">
+        <h2>Related Hubs</h2>
+        <div class="hub-badges">
+            {% for hub in related_hubs %}
+            <a href="/hub/{{ hub.name }}" class="badge badge-hub">{{ hub.name }} ({{ hub.count }} shared)</a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

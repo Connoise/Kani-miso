@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Hubs - Second Brain Viewer{% endblock %}
+
+{% block content %}
+<div class="hubs-container">
+    <h1>Hub Atlas</h1>
+    <p class="subtitle">Conceptual gathering places for related notes</p>
+
+    <div class="hub-grid">
+        {% for hub in hubs %}
+        <a href="/hub/{{ hub.title }}" class="hub-card">
+            <h3>{{ hub.title }}</h3>
+            <span class="status-badge status-{{ hub.status }}">{{ hub.status }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

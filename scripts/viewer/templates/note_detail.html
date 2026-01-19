@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}{{ note_title }} - Note{% endblock %}
+
+{% block content %}
+<div class="note-detail">
+    <div class="note-sidebar">
+        <div class="sidebar-section">
+            <h3>Metadata</h3>
+            <dl class="metadata">
+                <dt>Type:</dt>
+                <dd><span class="badge badge-{{ frontmatter.type }}">{{ frontmatter.type }}</span></dd>
+
+                {% if frontmatter.status %}
+                <dt>Status:</dt>
+                <dd><span class="status-badge status-{{ frontmatter.status }}">{{ frontmatter.status }}</span></dd>
+                {% endif %}
+
+                {% if frontmatter.created_at %}
+                <dt>Created:</dt>
+                <dd>{{ frontmatter.created_at|format_date }}</dd>
+                {% endif %}
+
+                {% if frontmatter.hubs %}
+                <dt>Hubs:</dt>
+                <dd>
+                    {% for hub in frontmatter.hubs %}
+                    <a href="/hub/{{ hub }}" class="badge badge-hub">{{ hub }}</a>
+                    {% endfor %}
+                </dd>
+                {% endif %}
+
+                {% if frontmatter.tags %}
+                <dt>Tags:</dt>
+                <dd>
+                    {% for tag in frontmatter.tags %}
+                    <span class="badge badge-tag">{{ tag }}</span>
+                    {% endfor %}
+                </dd>
+                {% endif %}
+            </dl>
+        </div>
+
+        {% if backlinks %}
+        <div class="sidebar-section">
+            <h3>Backlinks</h3>
+            <ul class="backlink-list">
+                {% for note in backlinks %}
+                <li><a href="/note/{{ note.path }}">{{ note.title }}</a></li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="sidebar-section">
+            <a href="{{ obsidian_uri }}" class="btn btn-obsidian" target="_blank">Open in Obsidian</a>
+        </div>
+    </div>
+
+    <div class="note-content">
+        <h1>{{ note_title }}</h1>
+        {{ content_html|safe }}
+    </div>
+</div>
+{% endblock %}

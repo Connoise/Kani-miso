@@ -30,3 +30,10 @@ pypdf==4.0.1
 
 # Optional: Better markdown parsing
 markdown==3.5.2
+
+# Viewer dependencies
+flask==3.0.0
+werkzeug==3.0.1
+markdown2==2.4.12
+pygments==2.17.2
+watchdog==3.0.0

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Timeline - Second Brain Viewer{% endblock %}
+
+{% block content %}
+<div class="timeline-container">
+    <h1>Timeline</h1>
+
+    <div class="filters">
+        <form method="get" action="/timeline">
+            <div class="filter-group">
+                <label>Type:</label>
+                <select name="type" multiple>
+                    <option value="note" {% if 'note' in filters.type %}selected{% endif %}>Note</option>
+                    <option value="reflection" {% if 'reflection' in filters.type %}selected{% endif %}>Reflection</option>
+                    <option value="source" {% if 'source' in filters.type %}selected{% endif %}>Source</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label>Status:</label>
+                <select name="status">
+                    <option value="">All</option>
+                    <option value="raw" {% if filters.status == 'raw' %}selected{% endif %}>Raw</option>
+                    <option value="processed" {% if filters.status == 'processed' %}selected{% endif %}>Processed</option>
+                    <option value="evergreen" {% if filters.status == 'evergreen' %}selected{% endif %}>Evergreen</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label>
+                    <input type="checkbox" name="show_archived" value="true" {% if filters.show_archived %}checked{% endif %}>
+                    Show archived
+                </label>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Apply Filters</button>
+        </form>
+    </div>
+
+    <div class="timeline-list">
+        {% for note in notes %}
+        <div class="timeline-item">
+            <div class="timeline-header">
+                <span class="timeline-date">{{ note.created_at|format_date }}</span>
+                <span class="badge badge-{{ note.type }}">{{ note.type }}</span>
+                {% if note.path.startswith('archive/') %}
+                <span class="badge badge-archived">ARCHIVED</span>
+                {% endif %}
+            </div>
+            <h3><a href="/note/{{ note.path }}">{{ note.title }}</a></h3>
+            {% if note.status %}
+            <span class="status-badge status-{{ note.status }}">{{ note.status }}</span>
+            {% endif %}
+            <p class="timeline-preview">{{ note.preview }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="pagination">
+        {% if offset > 0 %}
+        <a href="/timeline?offset={{ offset - limit }}&limit={{ limit }}" class="btn">Previous</a>
+        {% endif %}
+        {% if notes|length == limit %}
+        <a href="/timeline?offset={{ offset + limit }}&limit={{ limit }}" class="btn">Next</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
