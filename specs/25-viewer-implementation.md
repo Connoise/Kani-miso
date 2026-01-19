@@ -98,7 +98,7 @@ Follow this sequence to build incrementally testable milestones:
        frontmatter: dict
        links: list[Link]
        created_at: datetime
-       note_type: str
+       type: str
    ```
 
 **Milestone**: Parse single note, print extracted metadata
@@ -284,7 +284,7 @@ def create_app(config_path=None):
 import re
 from dataclasses import dataclass
 
-WIKILINK_PATTERN = re.compile(r'\[\[([^\]|#]+)(?:#[^\]|]*)?(?\|([^\]]+))?\]\]')
+WIKILINK_PATTERN = re.compile(r'\[\[([^\]|#]+)(?:#([^\]|]+))?(?:\|([^\]]+))?\]\]')
 
 @dataclass
 class Link:
@@ -296,8 +296,9 @@ def extract_links(content: str) -> list[Link]:
     links = []
     for match in WIKILINK_PATTERN.finditer(content):
         target = match.group(1).strip()
-        alias = match.group(2).strip() if match.group(2) else None
-        links.append(Link(target=target, alias=alias, section=None))
+        section = match.group(2).strip() if match.group(2) else None
+        alias = match.group(3).strip() if match.group(3) else None
+        links.append(Link(target=target, alias=alias, section=section))
     return links
 ```
 
@@ -370,7 +371,7 @@ def build_graph(db, center_path: str = None, depth: int = 2) -> dict:
                 nodes[path] = GraphNode(
                     id=path,
                     title=note.title,
-                    type=note.note_type,
+                    type=note.type,
                     status=note.frontmatter.get('status', 'unknown')
                 )
 
@@ -411,20 +412,53 @@ function initGraph(containerId, dataUrl) {
 
   // Load data
   d3.json(dataUrl).then(data => {
+    // Performance warning
+    if (data.nodes.length > 5000) {
+      showWarning(`Large graph detected (${data.nodes.length} nodes). Consider filtering by hub or using local view for better performance.`);
+    }
+
+    // Hub-centric force simulation
     const simulation = d3.forceSimulation(data.nodes)
       .force('link', d3.forceLink(data.links)
         .id(d => d.id)
-        .distance(80))
-      .force('charge', d3.forceManyBody().strength(-200))
+        .distance(d => {
+          // Hub-connected links get more space
+          return (d.source.type === 'hub' || d.target.type === 'hub') ? 100 : 80;
+        }))
+      .force('charge', d3.forceManyBody()
+        .strength(d => d.type === 'hub' ? -400 : -200))  // Stronger repulsion for hubs
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(25));
+      .force('collision', d3.forceCollide()
+        .radius(d => d.type === 'hub' ? 25 : 15));
 
-    // Links
+    // Optional radial force for hubs
+    const hubNodes = data.nodes.filter(d => d.type === 'hub');
+    if (hubNodes.length > 0) {
+      simulation.force('radial', d3.forceRadial()
+        .radius(200)
+        .strength(d => d.type === 'hub' ? 0.1 : 0));
+    }
+
+    // Define arrow markers for directed edges
+    svg.append('defs').append('marker')
+      .attr('id', 'arrowhead')
+      .attr('viewBox', '-0 -5 10 10')
+      .attr('refX', 20)
+      .attr('refY', 0)
+      .attr('orient', 'auto')
+      .attr('markerWidth', 8)
+      .attr('markerHeight', 8)
+      .append('svg:path')
+      .attr('d', 'M 0,-5 L 10,0 L 0,5')
+      .attr('fill', '#999');
+
+    // Links with arrows
     const link = g.append('g')
       .selectAll('line')
       .data(data.links)
       .join('line')
-      .attr('class', 'graph-link');
+      .attr('class', 'graph-link')
+      .attr('marker-end', 'url(#arrowhead)');  // Add arrow
 
     // Nodes
     const node = g.append('g')
@@ -491,36 +525,119 @@ function initGraph(containerId, dataUrl) {
 Learned from the Wikiois project:
 
 ### Index on Startup
+
+**Index Staleness Detection**:
+- Compare vault's last modified time to index's last indexed time
+- Vault modified time = maximum `mtime` of all `.md` files in vault
+- Algorithm:
+  1. Query index for `last_indexed` timestamp (stored in metadata table)
+  2. Walk vault directory tree, find max(mtime) of all `.md` files
+  3. If `last_indexed` is None or `max_mtime > last_indexed`, rebuild index
+  4. After rebuild, store current timestamp as `last_indexed`
+- Performance: Only stat files, don't read content during staleness check
+
 ```python
 def init_index(vault_path: Path, index_path: Path):
     """Initialize or update the search index."""
+    # Ensure index directory exists
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+
     db = sqlite3.connect(index_path)
+
+    # Create metadata table if not exists
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS _index_metadata (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
 
     # Check if rebuild needed
     last_indexed = get_last_indexed_time(db)
     vault_modified = get_vault_modified_time(vault_path)
 
     if last_indexed is None or vault_modified > last_indexed:
+        print(f"Index stale or missing. Rebuilding...")
         rebuild_index(db, vault_path)
+        # Store new timestamp
+        db.execute("""
+            INSERT OR REPLACE INTO _index_metadata (key, value)
+            VALUES ('last_indexed', ?)
+        """, (datetime.now().isoformat(),))
+        db.commit()
 
     return db
+
+def get_vault_modified_time(vault_path: Path) -> datetime:
+    """Get the most recent modification time of any .md file in vault."""
+    max_mtime = 0
+    for md_file in vault_path.rglob('*.md'):
+        max_mtime = max(max_mtime, md_file.stat().st_mtime)
+    return datetime.fromtimestamp(max_mtime) if max_mtime > 0 else datetime.min
 ```
 
 ### Incremental Updates (Optional)
+
+**File Watching Behavior** (if `watchdog` enabled):
+- Watch for file system events in vault directory
+- Debounce rapid-fire changes: Wait 1 second after last event before reindexing
+- Handle events:
+  - **File modified**: Re-parse and update note in index
+  - **File created**: Add new note to index
+  - **File deleted**: Remove note from index and mark outbound links as dead
+  - **File renamed**: Treat as delete + create
+- **Batch updates**: During bulk imports, disable watching or batch multiple changes
+- **Thread safety**: Use queue for events, process sequentially
+- **Error handling**: If reindex fails, log error but keep watching
+
 ```python
 def watch_vault(vault_path: Path, db):
-    """Watch for file changes and update index."""
+    """Watch for file changes and update index incrementally."""
     from watchdog.observers import Observer
     from watchdog.events import FileSystemEventHandler
+    import time
+    from threading import Timer
 
     class VaultHandler(FileSystemEventHandler):
+        def __init__(self, db):
+            self.db = db
+            self.pending_updates = set()
+            self.timer = None
+
         def on_modified(self, event):
             if event.src_path.endswith('.md'):
-                reindex_file(db, Path(event.src_path))
+                self._schedule_update(Path(event.src_path))
+
+        def on_created(self, event):
+            if event.src_path.endswith('.md'):
+                self._schedule_update(Path(event.src_path))
+
+        def on_deleted(self, event):
+            if event.src_path.endswith('.md'):
+                remove_from_index(self.db, Path(event.src_path))
+
+        def _schedule_update(self, path: Path):
+            """Debounce updates: wait 1 second after last change."""
+            self.pending_updates.add(path)
+            if self.timer:
+                self.timer.cancel()
+            self.timer = Timer(1.0, self._process_updates)
+            self.timer.start()
+
+        def _process_updates(self):
+            """Process all pending updates in batch."""
+            for path in self.pending_updates:
+                try:
+                    reindex_file(self.db, path)
+                except Exception as e:
+                    print(f"Error reindexing {path}: {e}")
+            self.pending_updates.clear()
 
     observer = Observer()
-    observer.schedule(VaultHandler(), str(vault_path), recursive=True)
+    handler = VaultHandler(db)
+    observer.schedule(handler, str(vault_path), recursive=True)
     observer.start()
+    return observer  # Caller can stop it later
 ```
 
 ### Query Performance
