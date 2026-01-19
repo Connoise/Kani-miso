@@ -60,7 +60,7 @@ def main():
     viewer_config = config.get('viewer', {})
     host = viewer_config.get('host', '127.0.0.1')
     port = viewer_config.get('port', 5000)
-    debug = viewer_config.get('debug', False)
+    debug = viewer_config.get('debug', True)  # Enable debug mode by default for troubleshooting
 
     # Create Flask app
     app = create_app(vault_path, config)
