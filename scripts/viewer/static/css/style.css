@@ -162,6 +162,11 @@ a.dead-link {
   color: #856404;
 }
 
+.badge-tweet {
+  background-color: #cfe2ff;
+  color: #084298;
+}
+
 .badge-project {
   background-color: #e2d9f3;
   color: #6f42c1;
@@ -486,6 +491,51 @@ a.dead-link {
   margin-top: 8px;
 }
 
+/* Tweets */
+.tweets-container {
+  background: white;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.tweet-list {
+  margin-top: 20px;
+}
+
+.tweet-item {
+  border-bottom: 1px solid #e9ecef;
+  padding: 20px 0;
+}
+
+.tweet-item h3 {
+  margin-bottom: 8px;
+}
+
+.tweet-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.tweet-date {
+  color: #666;
+  font-size: 14px;
+}
+
+.tweet-preview {
+  color: #666;
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+.no-results {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+
 /* Note detail */
 .note-detail {
   display: grid;
@@ -642,6 +692,12 @@ a.dead-link {
 .node-source {
   fill: #ffc107;
   stroke: #e0a800;
+  stroke-width: 1.5px;
+}
+
+.node-tweet {
+  fill: #0d6efd;
+  stroke: #084298;
   stroke-width: 1.5px;
 }
 

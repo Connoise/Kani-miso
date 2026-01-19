@@ -85,14 +85,15 @@ def create_app(vault_path: Path, config: dict = None):
             'show_archived': request.args.get('show_archived', 'true') == 'true'
         }
 
-        # Get pagination parameters
+        # Get sort and pagination parameters
+        sort_order = request.args.get('sort', 'desc')  # desc = newest first, asc = oldest first
         limit = int(request.args.get('limit', 20))
         offset = int(request.args.get('offset', 0))
 
         # Get timeline data
-        notes = get_timeline(get_db(), filters, limit, offset)
+        notes = get_timeline(get_db(), filters, limit, offset, sort_order)
 
-        return render_template('timeline.html', notes=notes, filters=filters, offset=offset, limit=limit)
+        return render_template('timeline.html', notes=notes, filters=filters, offset=offset, limit=limit, sort_order=sort_order)
 
     @app.route('/hubs')
     def hubs():
@@ -176,24 +177,28 @@ def create_app(vault_path: Path, config: dict = None):
     @app.route('/sources')
     def sources():
         """Source atlas view."""
-        source_type = request.args.get('source_type')
-
-        where_clause = "type = 'source'"
-        params = []
-
-        if source_type:
-            where_clause += " AND frontmatter LIKE ?"
-            params.append(f'%source_type: {source_type}%')
-
-        cursor = get_db().execute(f"""
-            SELECT path, filename, title, created_at, preview
+        cursor = get_db().execute("""
+            SELECT path, filename, title, created_at, preview, type
             FROM notes
-            WHERE {where_clause}
+            WHERE type = 'source'
             ORDER BY created_at DESC
-        """, params)
+        """)
 
         sources = [dict(row) for row in cursor]
-        return render_template('sources.html', sources=sources, current_filter=source_type)
+        return render_template('sources.html', sources=sources)
+
+    @app.route('/tweets')
+    def tweets():
+        """Tweets atlas view."""
+        cursor = get_db().execute("""
+            SELECT path, filename, title, created_at, preview, status
+            FROM notes
+            WHERE type = 'tweet'
+            ORDER BY created_at DESC
+        """)
+
+        tweets = [dict(row) for row in cursor]
+        return render_template('tweets.html', tweets=tweets)
 
     @app.route('/note/<path:note_path>')
     def note_detail(note_path):
