@@ -28,7 +28,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{{ url_for('static_files', filename='js/graph.js') }}"></script>
+<script src="{{ url_for('static', filename='js/graph.js') }}"></script>
 <script>
     // Initialize graph
     initGraph('graph', '/api/graph');
