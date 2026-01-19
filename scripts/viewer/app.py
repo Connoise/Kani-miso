@@ -3,7 +3,7 @@ Flask web application for Second-Brain viewer.
 Provides read-only web interface to browse notes, hubs, and graph.
 """
 
-from flask import Flask, render_template, request, jsonify, send_from_directory, url_for
+from flask import Flask, render_template, request, jsonify, send_from_directory, url_for, current_app
 from pathlib import Path
 import yaml
 from datetime import datetime, timedelta
@@ -39,6 +39,14 @@ def create_app(vault_path: Path, config: dict = None):
         known_files.add(md_file.name.lower())
     app.config['KNOWN_FILES'] = known_files
 
+    def get_db():
+        """Helper to get database connection."""
+        return current_app.config['DB']
+
+    def get_vault_path():
+        """Helper to get vault path."""
+        return current_app.config['VAULT_PATH']
+
     @app.route('/')
     def index():
         """Redirect to timeline view."""
@@ -61,14 +69,14 @@ def create_app(vault_path: Path, config: dict = None):
         offset = int(request.args.get('offset', 0))
 
         # Get timeline data
-        notes = get_timeline(db, filters, limit, offset)
+        notes = get_timeline(current_app.config['DB'], filters, limit, offset)
 
         return render_template('timeline.html', notes=notes, filters=filters, offset=offset, limit=limit)
 
     @app.route('/hubs')
     def hubs():
         """Hub atlas view."""
-        hubs = get_all_hubs(db)
+        hubs = get_all_hubs(get_db())
         return render_template('hubs.html', hubs=hubs)
 
     @app.route('/hub/<path:hub_name>')
@@ -79,7 +87,7 @@ def create_app(vault_path: Path, config: dict = None):
 
         # Try to find the hub file
         hub_file = None
-        for candidate in vault_path.rglob('*.md'):
+        for candidate in get_vault_path().rglob('*.md'):
             if candidate.stem.lower() == hub_name_decoded.lower() and 'hubs' in str(candidate):
                 hub_file = candidate
                 break
@@ -94,10 +102,10 @@ def create_app(vault_path: Path, config: dict = None):
         frontmatter, body = extract_frontmatter(content)
 
         # Render markdown
-        html = render_markdown(body, vault_path, hub_file, app.config['KNOWN_FILES'])
+        html = render_markdown(body, get_vault_path(), hub_file, current_app.config['KNOWN_FILES'])
 
         # Get backlinks (notes that link to this hub)
-        backlinks = get_backlinks(db, hub_name_decoded)
+        backlinks = get_backlinks(get_db(), hub_name_decoded)
 
         # Group backlinks by time period
         now = datetime.now()
@@ -123,7 +131,7 @@ def create_app(vault_path: Path, config: dict = None):
                 groups['older'].append(note)
 
         # Calculate related hubs (hubs that share notes with this hub)
-        related_hubs = calculate_related_hubs(db, backlinks)
+        related_hubs = calculate_related_hubs(get_db(), backlinks)
 
         return render_template('hub_detail.html',
                                hub_name=hub_name_decoded,
@@ -135,7 +143,7 @@ def create_app(vault_path: Path, config: dict = None):
     @app.route('/projects')
     def projects():
         """Project atlas view."""
-        cursor = db.execute("""
+        cursor = get_db().execute("""
             SELECT path, filename, title, status, created_at
             FROM notes
             WHERE type = 'project'
@@ -156,7 +164,7 @@ def create_app(vault_path: Path, config: dict = None):
             where_clause += " AND frontmatter LIKE ?"
             params.append(f'%source_type: {source_type}%')
 
-        cursor = db.execute(f"""
+        cursor = get_db().execute(f"""
             SELECT path, filename, title, created_at, preview
             FROM notes
             WHERE {where_clause}
@@ -173,8 +181,8 @@ def create_app(vault_path: Path, config: dict = None):
 
         # Try to find the note file
         note_file = None
-        for candidate in vault_path.rglob('*.md'):
-            rel_path = candidate.relative_to(vault_path)
+        for candidate in get_vault_path().rglob('*.md'):
+            rel_path = candidate.relative_to(get_vault_path())
             if str(rel_path) == note_path_decoded or candidate.stem.lower() == note_path_decoded.lower():
                 note_file = candidate
                 break
@@ -189,15 +197,15 @@ def create_app(vault_path: Path, config: dict = None):
         frontmatter, body = extract_frontmatter(content)
 
         # Render markdown
-        html = render_markdown(body, vault_path, note_file, app.config['KNOWN_FILES'])
+        html = render_markdown(body, get_vault_path(), note_file, current_app.config['KNOWN_FILES'])
 
         # Get backlinks
         note_title = frontmatter.get('title', note_file.stem)
-        backlinks = get_backlinks(db, note_title)
+        backlinks = get_backlinks(get_db(), note_title)
 
         # Build Obsidian URI
-        rel_path = note_file.relative_to(vault_path)
-        obsidian_uri = f"obsidian://open?vault={quote(app.config['VAULT_NAME'])}&file={quote(str(rel_path))}"
+        rel_path = note_file.relative_to(get_vault_path())
+        obsidian_uri = f"obsidian://open?vault={quote(current_app.config['VAULT_NAME'])}&file={quote(str(rel_path))}"
 
         return render_template('note_detail.html',
                                note_title=note_title,
@@ -214,7 +222,7 @@ def create_app(vault_path: Path, config: dict = None):
     @app.route('/api/graph')
     def api_graph():
         """API endpoint for graph data."""
-        data = get_graph_data(db)
+        data = get_graph_data(get_db())
         return jsonify(data)
 
     @app.route('/search')
@@ -224,7 +232,7 @@ def create_app(vault_path: Path, config: dict = None):
         results = []
 
         if query:
-            results = search_notes(db, query, limit=50)
+            results = search_notes(get_db(), query, limit=50)
 
         return render_template('search.html', query=query, results=results)
 
