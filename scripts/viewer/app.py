@@ -252,6 +252,22 @@ def create_app(vault_path: Path, config: dict = None):
         except:
             return date_str
 
+    @app.errorhandler(Exception)
+    def handle_error(e):
+        """Error handler to show actual errors for debugging."""
+        import traceback
+        error_msg = f"""
+        <html>
+        <head><title>Error</title></head>
+        <body>
+        <h1>Error Details</h1>
+        <pre>{traceback.format_exc()}</pre>
+        <p><strong>Error:</strong> {str(e)}</p>
+        </body>
+        </html>
+        """
+        return error_msg, 500
+
     return app
 
 
