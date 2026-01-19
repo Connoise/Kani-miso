@@ -3,12 +3,13 @@ Flask web application for Second-Brain viewer.
 Provides read-only web interface to browse notes, hubs, and graph.
 """
 
-from flask import Flask, render_template, request, jsonify, send_from_directory, url_for, current_app
+from flask import Flask, render_template, request, jsonify, send_from_directory, url_for, current_app, g
 from pathlib import Path
 import yaml
+import sqlite3
 from datetime import datetime, timedelta
 from urllib.parse import quote, unquote
-from .indexer import init_index, get_timeline, get_all_hubs, get_note_by_path, get_backlinks, search_notes, get_graph_data
+from .indexer import init_index, get_index_path, get_timeline, get_all_hubs, get_note_by_path, get_backlinks, search_notes, get_graph_data
 from .parser import render_markdown, extract_frontmatter
 
 
@@ -34,10 +35,12 @@ def create_app(vault_path: Path, config: dict = None):
     app.config['VAULT_PATH'] = vault_path
     app.config['VAULT_NAME'] = config.get('vault', {}).get('name', 'My Vault') if config else 'My Vault'
 
-    # Initialize index
+    # Initialize index (this ensures index exists and is up-to-date)
     print(f"Initializing index for vault: {vault_path}")
-    db = init_index(vault_path)
-    app.config['DB'] = db
+    _ = init_index(vault_path)  # Creates/updates index, returns connection we don't store
+
+    # Store index path for per-request connections
+    app.config['INDEX_PATH'] = get_index_path(vault_path)
 
     # Build known files set for dead link detection
     known_files = set()
@@ -47,8 +50,19 @@ def create_app(vault_path: Path, config: dict = None):
     app.config['KNOWN_FILES'] = known_files
 
     def get_db():
-        """Helper to get database connection."""
-        return current_app.config['DB']
+        """Get database connection for current request (thread-safe)."""
+        if 'db' not in g:
+            # Create a new connection for this request/thread
+            g.db = sqlite3.connect(str(current_app.config['INDEX_PATH']))
+            g.db.row_factory = sqlite3.Row
+        return g.db
+
+    @app.teardown_appcontext
+    def close_db(error):
+        """Close database connection at end of request."""
+        db = g.pop('db', None)
+        if db is not None:
+            db.close()
 
     def get_vault_path():
         """Helper to get vault path."""
@@ -76,7 +90,7 @@ def create_app(vault_path: Path, config: dict = None):
         offset = int(request.args.get('offset', 0))
 
         # Get timeline data
-        notes = get_timeline(current_app.config['DB'], filters, limit, offset)
+        notes = get_timeline(get_db(), filters, limit, offset)
 
         return render_template('timeline.html', notes=notes, filters=filters, offset=offset, limit=limit)
 
