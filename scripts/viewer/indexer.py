@@ -191,8 +191,10 @@ def index_file(db: sqlite3.Connection, file_path: Path, vault_path: Path):
 
     frontmatter = parsed['frontmatter']
 
-    # Determine relative path from vault
+    # Determine relative path from vault (use forward slashes for portability)
     rel_path = file_path.relative_to(vault_path)
+    # Convert to POSIX path (forward slashes) for storage
+    path_str = rel_path.as_posix()
 
     # Extract metadata
     title = frontmatter.get('title', file_path.stem)
@@ -206,7 +208,7 @@ def index_file(db: sqlite3.Connection, file_path: Path, vault_path: Path):
         (path, filename, title, type, status, created_at, body, preview)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        str(rel_path),
+        path_str,
         file_path.name,
         title,
         note_type,
@@ -370,30 +372,65 @@ def get_graph_data(db: sqlite3.Connection) -> dict:
     """
     # Get all notes as nodes
     cursor = db.execute("""
-        SELECT path, title, type, status
+        SELECT path, title, type, status, filename
         FROM notes
     """)
-    nodes = [
-        {
-            'id': row['path'],
-            'title': row['title'],
+    nodes = []
+    # Create lookup maps for resolving wikilinks to paths
+    title_to_path = {}  # Case-insensitive title lookup
+    filename_to_path = {}  # Case-insensitive filename lookup
+
+    for row in cursor:
+        path = row['path']
+        title = row['title']
+        filename = row['filename']
+
+        nodes.append({
+            'id': path,
+            'title': title,
             'type': row['type'],
             'status': row['status']
-        }
-        for row in cursor
-    ]
+        })
 
-    # Get all links as edges
+        # Build lookup maps (case-insensitive)
+        if title:
+            title_to_path[title.lower()] = path
+        if filename:
+            # Also store without extension
+            filename_to_path[filename.lower()] = path
+            name_no_ext = filename.replace('.md', '')
+            filename_to_path[name_no_ext.lower()] = path
+
+    # Get all links as edges and resolve targets to paths
     cursor = db.execute("""
-        SELECT source_path, target
+        SELECT DISTINCT source_path, target
         FROM links
     """)
-    links = [
-        {
-            'source': row['source_path'],
-            'target': row['target']
-        }
-        for row in cursor
-    ]
+    links = []
+
+    for row in cursor:
+        source_path = row['source_path']
+        target = row['target']
+
+        # Try to resolve target to a node id (path)
+        target_lower = target.lower()
+        target_path = None
+
+        # Try exact title match first
+        if target_lower in title_to_path:
+            target_path = title_to_path[target_lower]
+        # Try filename match
+        elif target_lower in filename_to_path:
+            target_path = filename_to_path[target_lower]
+        # Try with .md extension
+        elif f"{target_lower}.md" in filename_to_path:
+            target_path = filename_to_path[f"{target_lower}.md"]
+
+        # Only add link if we found a matching target node
+        if target_path:
+            links.append({
+                'source': source_path,
+                'target': target_path
+            })
 
     return {'nodes': nodes, 'links': links}

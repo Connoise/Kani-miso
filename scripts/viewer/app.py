@@ -201,10 +201,16 @@ def create_app(vault_path: Path, config: dict = None):
         note_path_decoded = unquote(note_path)
 
         # Try to find the note file
+        # Normalize path for comparison (use forward slashes)
+        note_path_normalized = note_path_decoded.replace('\\', '/')
+
         note_file = None
         for candidate in get_vault_path().rglob('*.md'):
             rel_path = candidate.relative_to(get_vault_path())
-            if str(rel_path) == note_path_decoded or candidate.stem.lower() == note_path_decoded.lower():
+            # Use POSIX path (forward slashes) for comparison
+            candidate_path = rel_path.as_posix()
+
+            if candidate_path == note_path_normalized or candidate.stem.lower() == note_path_normalized.lower():
                 note_file = candidate
                 break
 
@@ -224,9 +230,9 @@ def create_app(vault_path: Path, config: dict = None):
         note_title = frontmatter.get('title', note_file.stem)
         backlinks = get_backlinks(get_db(), note_title)
 
-        # Build Obsidian URI
+        # Build Obsidian URI (use forward slashes)
         rel_path = note_file.relative_to(get_vault_path())
-        obsidian_uri = f"obsidian://open?vault={quote(current_app.config['VAULT_NAME'])}&file={quote(str(rel_path))}"
+        obsidian_uri = f"obsidian://open?vault={quote(current_app.config['VAULT_NAME'])}&file={quote(rel_path.as_posix())}"
 
         return render_template('note_detail.html',
                                note_title=note_title,
