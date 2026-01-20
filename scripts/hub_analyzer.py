@@ -50,7 +50,7 @@ class HubAnalyzer:
         self.model = self.config['claude']['model']
 
         # Note folders to analyze
-        self.note_folders = ['notes', 'reflections', 'sources']
+        self.note_folders = ['notes', 'reflections', 'sources', 'tweets']
 
         # Load existing hubs
         self.existing_hubs = self._load_existing_hubs()
