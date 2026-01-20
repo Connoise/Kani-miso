@@ -276,7 +276,7 @@ def search_notes(db: sqlite3.Connection, query: str, limit: int = 50) -> list[di
     return results
 
 
-def get_timeline(db: sqlite3.Connection, filters: dict = None, limit: int = 50, offset: int = 0) -> list[dict]:
+def get_timeline(db: sqlite3.Connection, filters: dict = None, limit: int = 50, offset: int = 0, sort_order: str = 'desc') -> list[dict]:
     """
     Get notes for timeline view.
 
@@ -285,6 +285,7 @@ def get_timeline(db: sqlite3.Connection, filters: dict = None, limit: int = 50, 
         filters: Dict of filter criteria (type, status, hub, date_range, show_archived)
         limit: Maximum results
         offset: Offset for pagination
+        sort_order: Sort order ('desc' for newest first, 'asc' for oldest first)
 
     Returns:
         List of note dicts
@@ -317,12 +318,13 @@ def get_timeline(db: sqlite3.Connection, filters: dict = None, limit: int = 50, 
 
     # Build query
     where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+    order_direction = "DESC" if sort_order == 'desc' else "ASC"
 
     cursor = db.execute(f"""
         SELECT path, filename, title, type, status, created_at, preview
         FROM notes
         WHERE {where_sql}
-        ORDER BY created_at DESC
+        ORDER BY created_at {order_direction}
         LIMIT ? OFFSET ?
     """, (*params, limit, offset))
 

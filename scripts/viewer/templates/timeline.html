@@ -14,6 +14,7 @@
                     <option value="note" {% if 'note' in filters.type %}selected{% endif %}>Note</option>
                     <option value="reflection" {% if 'reflection' in filters.type %}selected{% endif %}>Reflection</option>
                     <option value="source" {% if 'source' in filters.type %}selected{% endif %}>Source</option>
+                    <option value="tweet" {% if 'tweet' in filters.type %}selected{% endif %}>Tweet</option>
                 </select>
             </div>
 
@@ -24,6 +25,14 @@
                     <option value="raw" {% if filters.status == 'raw' %}selected{% endif %}>Raw</option>
                     <option value="processed" {% if filters.status == 'processed' %}selected{% endif %}>Processed</option>
                     <option value="evergreen" {% if filters.status == 'evergreen' %}selected{% endif %}>Evergreen</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label>Sort:</label>
+                <select name="sort">
+                    <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>Newest First</option>
+                    <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>Oldest First</option>
                 </select>
             </div>
 
