@@ -198,9 +198,50 @@ def index_file(db: sqlite3.Connection, file_path: Path, vault_path: Path):
 
     # Extract metadata
     title = frontmatter.get('title', file_path.stem)
-    note_type = frontmatter.get('type', 'note')
+
+    # Determine note type
+    # First check frontmatter, then infer from folder location
+    note_type = frontmatter.get('type')
+    if not note_type:
+        # Infer type from folder location
+        parts = rel_path.parts
+        if len(parts) > 0:
+            folder = parts[0].lower()
+            if folder == 'tweets':
+                note_type = 'tweet'
+            elif folder == 'reflections':
+                note_type = 'reflection'
+            elif folder == 'sources':
+                note_type = 'source'
+            elif folder == 'hubs':
+                note_type = 'hub'
+            elif folder == 'projects':
+                note_type = 'project'
+            elif folder == 'archive':
+                note_type = 'archive'
+            elif folder == 'inbox':
+                note_type = 'inbox'
+            else:
+                note_type = 'note'
+        else:
+            note_type = 'note'
+
     status = frontmatter.get('status', 'raw')
+
+    # Extract created_at date
+    # First check frontmatter, then try to extract from filename
     created_at = frontmatter.get('created_at', '')
+    if not created_at:
+        # Try to extract date from filename (format: YYYY-MM-DD--title.md)
+        filename = file_path.stem
+        if len(filename) >= 10 and filename[4] == '-' and filename[7] == '-':
+            date_part = filename[:10]
+            try:
+                # Validate it's a real date
+                datetime.strptime(date_part, '%Y-%m-%d')
+                created_at = date_part
+            except ValueError:
+                pass
 
     # Insert note
     db.execute("""
