@@ -260,7 +260,7 @@ def index_file(db: sqlite3.Connection, file_path: Path, vault_path: Path):
     ))
 
     # Get the note ID
-    note_id = db.execute("SELECT id FROM notes WHERE path = ?", (str(rel_path),)).fetchone()[0]
+    note_id = db.execute("SELECT id FROM notes WHERE path = ?", (path_str,)).fetchone()[0]
 
     # Insert into FTS
     db.execute("""
@@ -273,7 +273,7 @@ def index_file(db: sqlite3.Connection, file_path: Path, vault_path: Path):
         db.execute("""
             INSERT INTO links (source_path, target, section)
             VALUES (?, ?, ?)
-        """, (str(rel_path), link.target, link.section))
+        """, (path_str, link.target, link.section))
 
 
 def search_notes(db: sqlite3.Connection, query: str, limit: int = 50) -> list[dict]:
