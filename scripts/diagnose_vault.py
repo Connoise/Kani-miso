@@ -5,7 +5,13 @@ Diagnostic script to check vault configuration and tweet files.
 
 import sys
 import yaml
+import sqlite3
 from pathlib import Path
+
+# Add viewer module to path
+sys.path.insert(0, str(Path(__file__).parent))
+
+from viewer.indexer import get_index_path
 
 def main():
     # Load config
@@ -108,14 +114,58 @@ def main():
     print(f"\n   Total files with type: tweet = {tweet_type_count}")
 
     if tweet_type_count == 0:
-        print("\n⚠️  No tweet files found!")
-        print("   Tweets must have 'type: tweet' in their frontmatter.")
-        print("   Example frontmatter:")
-        print("   ---")
-        print("   type: tweet")
-        print("   title: My Tweet Title")
-        print("   created_at: 2026-01-20T10:30:00")
-        print("   ---")
+        print("\n⚠️  No tweet files found with frontmatter!")
+        print("   However, as of the latest update, tweets can be detected by folder location.")
+        print("   Files in the tweets/ folder will automatically be tagged as type: tweet")
+
+    # Check the database index
+    print("\n" + "="*70)
+    print("📊 CHECKING VIEWER INDEX DATABASE")
+    print("="*70)
+
+    index_path = get_index_path(vault_path)
+    print(f"Index location: {index_path}")
+
+    if not index_path.exists():
+        print("⚠️  Index database does not exist!")
+        print("   Run: python scripts\\rebuild_index.py")
+    else:
+        print(f"✓ Index exists (size: {index_path.stat().st_size / 1024:.1f} KB)")
+
+        try:
+            db = sqlite3.connect(str(index_path))
+            db.row_factory = sqlite3.Row
+
+            # Check tweet count in database
+            cursor = db.execute("SELECT COUNT(*) as count FROM notes WHERE type = 'tweet'")
+            db_tweet_count = cursor.fetchone()[0]
+
+            cursor = db.execute("SELECT COUNT(*) as count FROM notes")
+            total_count = cursor.fetchone()[0]
+
+            print(f"\n📈 Database Statistics:")
+            print(f"   Total indexed notes: {total_count}")
+            print(f"   Tweets in database: {db_tweet_count}")
+
+            if db_tweet_count > 0:
+                print(f"\n   Sample tweets from database:")
+                cursor = db.execute("""
+                    SELECT path, title
+                    FROM notes
+                    WHERE type = 'tweet'
+                    LIMIT 5
+                """)
+                for row in cursor:
+                    print(f"     - {row['title']}")
+            else:
+                print(f"\n   ⚠️  No tweets indexed in database!")
+                print(f"   This means the index needs to be rebuilt with the latest code.")
+                print(f"   Run: python scripts\\rebuild_index.py")
+
+            db.close()
+
+        except Exception as e:
+            print(f"   ❌ Error reading database: {e}")
 
 if __name__ == '__main__':
     main()
