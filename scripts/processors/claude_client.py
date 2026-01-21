@@ -1,11 +1,15 @@
 """
 Claude API Client for Second Brain
 Handles communication with Anthropic's Claude API for processing captures.
+Supports both text and image (Vision) processing.
 """
 
 import os
+import base64
+import json
+import mimetypes
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import anthropic
 
 import sys
@@ -151,6 +155,206 @@ class ClaudeClient:
 
         if capture.get('context'):
             lines.append(f"Context: {capture['context']}")
+
+        return "\n".join(lines)
+
+    def _encode_image_to_base64(self, image_path: str) -> tuple[str, str]:
+        """
+        Encode an image file to base64.
+
+        Args:
+            image_path: Path to image file
+
+        Returns:
+            Tuple of (base64_data, media_type)
+        """
+        path = Path(image_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Image not found: {image_path}")
+
+        # Determine media type
+        mime_type, _ = mimetypes.guess_type(str(path))
+        if mime_type is None:
+            # Default based on extension
+            ext = path.suffix.lower()
+            mime_map = {
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.png': 'image/png',
+                '.gif': 'image/gif',
+                '.webp': 'image/webp',
+            }
+            mime_type = mime_map.get(ext, 'image/jpeg')
+
+        with open(path, 'rb') as f:
+            image_data = base64.standard_b64encode(f.read()).decode('utf-8')
+
+        return image_data, mime_type
+
+    def process_capture_with_images(
+        self,
+        capture: Dict[str, Any],
+        image_paths: List[str],
+        specs_dir: Path,
+        notes_root: Path,
+    ) -> str:
+        """
+        Process a capture that includes images using Vision.
+
+        Args:
+            capture: Capture dictionary from queue
+            image_paths: List of paths to image files
+            specs_dir: Path to specs directory
+            notes_root: Path to notes root (for relative paths in output)
+
+        Returns:
+            Processed markdown content with embedded images
+        """
+        # Load the telegram processing prompt
+        telegram_prompt_path = specs_dir / "telegram-processing-prompt.md"
+        system_prompt = self.load_prompt_template(telegram_prompt_path)
+
+        # Add image-specific instructions to system prompt
+        image_instructions = """
+
+## Image Processing Instructions
+
+When processing captures with images:
+1. Analyze each image carefully and describe its content
+2. Connect the image content to any associated text
+3. In the output markdown, include Obsidian-compatible image embeds using the format: ![[relative/path/to/image.jpg]]
+4. Create a cohesive note that integrates both the visual and textual content
+5. Identify themes and concepts from both the images and text
+6. Suggest relevant hubs based on the combined content
+"""
+        system_prompt += image_instructions
+
+        # Build the content array with images and text
+        content = []
+
+        # Add images first
+        for image_path in image_paths:
+            try:
+                image_data, media_type = self._encode_image_to_base64(image_path)
+
+                # Calculate relative path for the markdown output
+                try:
+                    rel_path = Path(image_path).relative_to(notes_root)
+                    rel_path_str = str(rel_path).replace("\\", "/")
+                except ValueError:
+                    rel_path_str = Path(image_path).name
+
+                content.append({
+                    "type": "text",
+                    "text": f"[Image: {rel_path_str}]"
+                })
+                content.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": media_type,
+                        "data": image_data,
+                    }
+                })
+                logger.debug(f"Added image to request: {image_path}")
+
+            except Exception as e:
+                logger.error(f"Failed to encode image {image_path}: {e}")
+                content.append({
+                    "type": "text",
+                    "text": f"[Image could not be loaded: {image_path}]"
+                })
+
+        # Add the text content
+        text_message = self._build_telegram_user_message_with_images(capture, image_paths, notes_root)
+        content.append({
+            "type": "text",
+            "text": text_message
+        })
+
+        # Call Claude API with vision
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": content}
+            ]
+        )
+
+        # Extract the text content
+        markdown_content = response.content[0].text
+
+        logger.info(
+            f"Processed capture {capture['id']} with {len(image_paths)} images "
+            f"(tokens: {response.usage.input_tokens} in, {response.usage.output_tokens} out)"
+        )
+
+        return markdown_content
+
+    def _build_telegram_user_message_with_images(
+        self,
+        capture: Dict[str, Any],
+        image_paths: List[str],
+        notes_root: Path,
+    ) -> str:
+        """
+        Build the user message for captures with images.
+
+        Args:
+            capture: Capture dictionary
+            image_paths: List of image paths
+            notes_root: Path to notes root
+
+        Returns:
+            Formatted user message
+        """
+        lines = [
+            "Process this Telegram capture that includes images.",
+            "Use claude-master-prompt.md and telegram-processing-prompt.md",
+            "Output markdown only. Do not write files yet.",
+            "",
+            f"Number of images: {len(image_paths)}",
+            "",
+            "Image paths for embedding in the note:",
+        ]
+
+        # Add relative paths for each image
+        for image_path in image_paths:
+            try:
+                rel_path = Path(image_path).relative_to(notes_root)
+                rel_path_str = str(rel_path).replace("\\", "/")
+            except ValueError:
+                rel_path_str = Path(image_path).name
+            lines.append(f"  - {rel_path_str}")
+
+        lines.append("")
+        lines.append(f"Type: {capture['type']}")
+        lines.append("")
+        lines.append("Associated text:")
+        lines.append(capture['body'])
+
+        # Add context fields if present
+        if capture.get('surface'):
+            lines.append(f"Surface: {capture['surface']}")
+        if capture.get('mood'):
+            lines.append(f"Mood: {capture['mood']}")
+        if capture.get('energy'):
+            lines.append(f"Energy: {capture['energy']}")
+        if capture.get('confidence'):
+            lines.append(f"Confidence: {capture['confidence']}")
+        if capture.get('trigger'):
+            lines.append(f"Trigger: {capture['trigger']}")
+        if capture.get('context'):
+            lines.append(f"Context: {capture['context']}")
+
+        lines.append("")
+        lines.append("Create a single cohesive note that:")
+        lines.append("1. Describes what is shown in the image(s)")
+        lines.append("2. Integrates the associated text")
+        lines.append("3. Includes Obsidian image embeds: ![[path/to/image.jpg]]")
+        lines.append("4. Identifies themes from both visual and text content")
 
         return "\n".join(lines)
 
