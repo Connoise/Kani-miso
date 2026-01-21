@@ -42,6 +42,14 @@ folders:
   inbox: "inbox"
   hubs: "hubs"
   tweets: "tweets"
+  images: "images"  # Date-organized image storage (images/YYYY/MM/DD/)
+
+images:
+  enabled: true
+  # Images are stored in date-based folders: images/YYYY/MM/DD/image-001.jpg
+  # When multiple images are sent, they are grouped and associated with the next text message
+  wait_for_text: true  # Images without text stay pending until text is sent
+  max_pending_images: 10  # Maximum images to buffer before auto-creating note
 
 logging:
   level: "INFO"  # DEBUG, INFO, WARNING, ERROR

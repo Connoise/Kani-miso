@@ -1,9 +1,11 @@
 """
 Main Processor for Second Brain
 Orchestrates the processing of queued captures.
+Supports both text-only and image+text captures.
 """
 
 import sys
+import json
 from pathlib import Path
 from collections import defaultdict
 import yaml
@@ -145,9 +147,26 @@ class Processor:
                 # Mark as processing
                 self.queue.mark_processing(capture['id'])
 
-                # Process with Claude
-                logger.info(f"Processing capture {capture['id']} ({capture['type']})")
-                markdown = self.claude.process_telegram_capture(capture, specs_dir)
+                # Check if capture has images
+                image_paths = []
+                if capture.get('image_paths'):
+                    try:
+                        image_paths = json.loads(capture['image_paths'])
+                    except (json.JSONDecodeError, TypeError):
+                        image_paths = []
+
+                # Process with Claude (with or without images)
+                if image_paths:
+                    logger.info(f"Processing capture {capture['id']} ({capture['type']}) with {len(image_paths)} images")
+                    markdown = self.claude.process_capture_with_images(
+                        capture,
+                        image_paths,
+                        specs_dir,
+                        self.notes_root,
+                    )
+                else:
+                    logger.info(f"Processing capture {capture['id']} ({capture['type']})")
+                    markdown = self.claude.process_telegram_capture(capture, specs_dir)
 
                 # Write to file
                 file_path = self.file_writer.write_note(markdown, capture)

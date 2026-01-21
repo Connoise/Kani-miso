@@ -268,6 +268,58 @@ def create_app(vault_path: Path, config: dict = None):
 
         return render_template('search.html', query=query, results=results)
 
+    @app.route('/vault-image/<path:image_path>')
+    def vault_image(image_path):
+        """
+        Serve images from the vault directory.
+
+        This route handles Obsidian-style image embeds like ![[images/2026/01/21/image-001.jpg]]
+        """
+        # Normalize path separators
+        image_path = image_path.replace('\\', '/')
+
+        # Security: prevent directory traversal
+        if '..' in image_path:
+            return "Invalid path", 403
+
+        # Build full path
+        full_path = get_vault_path() / image_path
+
+        if not full_path.exists():
+            return f"Image not found: {image_path}", 404
+
+        # Ensure the path is within the vault
+        try:
+            full_path.resolve().relative_to(get_vault_path().resolve())
+        except ValueError:
+            return "Access denied", 403
+
+        # Serve the file
+        return send_from_directory(
+            str(full_path.parent),
+            full_path.name,
+            mimetype=None  # Let Flask guess based on extension
+        )
+
+    @app.route('/images')
+    def images_gallery():
+        """Image gallery view - browse all images in the vault."""
+        images = []
+        images_dir = get_vault_path() / 'images'
+
+        if images_dir.exists():
+            # Find all images organized by date
+            for image_file in sorted(images_dir.rglob('*'), reverse=True):
+                if image_file.suffix.lower() in {'.jpg', '.jpeg', '.png', '.gif', '.webp'}:
+                    rel_path = image_file.relative_to(get_vault_path())
+                    images.append({
+                        'path': str(rel_path).replace('\\', '/'),
+                        'name': image_file.name,
+                        'date': image_file.parent.name if image_file.parent != images_dir else 'Unsorted',
+                    })
+
+        return render_template('images.html', images=images)
+
     @app.template_filter('format_date')
     def format_date(date_str):
         """Template filter to format ISO dates."""

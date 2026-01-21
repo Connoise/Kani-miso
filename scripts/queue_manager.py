@@ -46,6 +46,7 @@ class QueueManager:
                     context TEXT,
                     body TEXT NOT NULL,
                     attachments TEXT,  -- JSON array of attachment info
+                    image_paths TEXT,  -- JSON array of image paths for this capture
                     status TEXT DEFAULT 'pending',
                     processed_at TEXT,
                     error_message TEXT,
@@ -53,6 +54,23 @@ class QueueManager:
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # Table for pending images (waiting for text association)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS pending_images (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    telegram_message_id INTEGER UNIQUE,
+                    chat_id INTEGER NOT NULL,
+                    file_id TEXT NOT NULL,
+                    file_path TEXT,  -- Local path after download
+                    captured_at TEXT NOT NULL,
+                    status TEXT DEFAULT 'pending',  -- pending, associated, orphan
+                    associated_capture_id INTEGER,  -- FK to captures.id when associated
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (associated_capture_id) REFERENCES captures(id)
+                )
+            """)
+
             conn.commit()
             logger.info(f"Queue database initialized at {self.db_path}")
 
@@ -228,3 +246,171 @@ class QueueManager:
             logger.warning(f"Reset {count} stuck captures from processing to pending")
 
         return count
+
+    # === Image handling methods ===
+
+    def add_pending_image(
+        self,
+        chat_id: int,
+        file_id: str,
+        file_path: str,
+        captured_at: datetime,
+        telegram_message_id: Optional[int] = None,
+    ) -> int:
+        """
+        Add a pending image waiting for text association.
+
+        Args:
+            chat_id: Telegram chat ID
+            file_id: Telegram file ID
+            file_path: Local path where image is saved
+            captured_at: When the image was sent
+            telegram_message_id: Telegram message ID
+
+        Returns:
+            Database ID of the pending image
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO pending_images (
+                    telegram_message_id, chat_id, file_id, file_path, captured_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    telegram_message_id,
+                    chat_id,
+                    file_id,
+                    file_path,
+                    captured_at.isoformat(),
+                ),
+            )
+            conn.commit()
+            image_id = cursor.lastrowid
+            logger.info(f"Added pending image {image_id} (file: {file_path})")
+            return image_id
+
+    def get_pending_images(self, chat_id: int) -> List[Dict[str, Any]]:
+        """
+        Get all pending images for a chat.
+
+        Args:
+            chat_id: Telegram chat ID
+
+        Returns:
+            List of pending image dictionaries
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT * FROM pending_images
+                WHERE chat_id = ? AND status = 'pending'
+                ORDER BY captured_at ASC
+                """,
+                (chat_id,),
+            )
+            images = [dict(row) for row in cursor.fetchall()]
+
+        logger.debug(f"Retrieved {len(images)} pending images for chat {chat_id}")
+        return images
+
+    def associate_images_with_capture(
+        self,
+        image_ids: List[int],
+        capture_id: int,
+    ) -> int:
+        """
+        Associate pending images with a text capture.
+
+        Args:
+            image_ids: List of pending image IDs
+            capture_id: Capture ID to associate with
+
+        Returns:
+            Number of images associated
+        """
+        if not image_ids:
+            return 0
+
+        with self._get_connection() as conn:
+            placeholders = ','.join('?' * len(image_ids))
+            cursor = conn.execute(
+                f"""
+                UPDATE pending_images
+                SET status = 'associated', associated_capture_id = ?
+                WHERE id IN ({placeholders}) AND status = 'pending'
+                """,
+                [capture_id] + image_ids,
+            )
+            conn.commit()
+            count = cursor.rowcount
+
+        logger.info(f"Associated {count} images with capture {capture_id}")
+        return count
+
+    def get_images_for_capture(self, capture_id: int) -> List[Dict[str, Any]]:
+        """
+        Get all images associated with a capture.
+
+        Args:
+            capture_id: Capture ID
+
+        Returns:
+            List of image dictionaries
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT * FROM pending_images
+                WHERE associated_capture_id = ?
+                ORDER BY captured_at ASC
+                """,
+                (capture_id,),
+            )
+            images = [dict(row) for row in cursor.fetchall()]
+
+        return images
+
+    def get_pending_image_count(self, chat_id: int) -> int:
+        """
+        Get count of pending images for a chat.
+
+        Args:
+            chat_id: Telegram chat ID
+
+        Returns:
+            Number of pending images
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT COUNT(*) FROM pending_images
+                WHERE chat_id = ? AND status = 'pending'
+                """,
+                (chat_id,),
+            )
+            return cursor.fetchone()[0]
+
+    def update_capture_image_paths(
+        self,
+        capture_id: int,
+        image_paths: List[str],
+    ) -> None:
+        """
+        Update the image_paths field for a capture.
+
+        Args:
+            capture_id: Capture ID
+            image_paths: List of image file paths
+        """
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE captures
+                SET image_paths = ?
+                WHERE id = ?
+                """,
+                (json.dumps(image_paths), capture_id),
+            )
+            conn.commit()
+        logger.debug(f"Updated capture {capture_id} with {len(image_paths)} image paths")

@@ -23,6 +23,12 @@ class Link:
 # Regex pattern for wikilinks: [[target]], [[target#section]], [[target|alias]], [[target#section|alias]]
 WIKILINK_PATTERN = re.compile(r'\[\[([^\]|#]+)(?:#([^\]|]+))?(?:\|([^\]]+))?\]\]')
 
+# Regex pattern for Obsidian image embeds: ![[image.jpg]], ![[path/to/image.png]]
+IMAGE_EMBED_PATTERN = re.compile(r'!\[\[([^\]]+)\]\]')
+
+# Common image extensions
+IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'}
+
 
 def extract_frontmatter(content: str) -> tuple[dict, str]:
     """
@@ -117,9 +123,23 @@ def generate_heading_anchors(content: str) -> dict[str, int]:
     return heading_counts
 
 
+def is_image_path(path: str) -> bool:
+    """
+    Check if a path refers to an image file.
+
+    Args:
+        path: File path to check
+
+    Returns:
+        True if path has an image extension
+    """
+    ext = Path(path).suffix.lower()
+    return ext in IMAGE_EXTENSIONS
+
+
 def render_markdown(content: str, vault_path: Path, note_path: Path, known_files: set[str]) -> str:
     """
-    Render markdown to HTML with wikilink conversion.
+    Render markdown to HTML with wikilink and image embed conversion.
 
     Args:
         content: Markdown content
@@ -130,11 +150,34 @@ def render_markdown(content: str, vault_path: Path, note_path: Path, known_files
     Returns:
         Rendered HTML
     """
-    # First, replace wikilinks with proper HTML links
+    # First, replace Obsidian image embeds with HTML img tags
+    def replace_image_embed(match):
+        image_path = match.group(1).strip()
+
+        # Normalize path separators
+        image_path_normalized = image_path.replace("\\", "/")
+
+        # Build the src URL (will be served by /vault-image/ route)
+        src = f"/vault-image/{image_path_normalized}"
+
+        # Get just the filename for alt text
+        alt_text = Path(image_path).name
+
+        return f'<img src="{src}" alt="{alt_text}" class="vault-image" loading="lazy">'
+
+    # Replace image embeds first (before wikilinks to avoid conflicts)
+    content_with_images = IMAGE_EMBED_PATTERN.sub(replace_image_embed, content)
+
+    # Then, replace wikilinks with proper HTML links
     def replace_wikilink(match):
         target = match.group(1).strip()
         section = match.group(2).strip() if match.group(2) else None
         alias = match.group(3).strip() if match.group(3) else target
+
+        # Check if this is an image (shouldn't happen after image embed replacement, but just in case)
+        if is_image_path(target):
+            src = f"/vault-image/{target.replace(chr(92), '/')}"
+            return f'<img src="{src}" alt="{Path(target).name}" class="vault-image" loading="lazy">'
 
         # Check if target exists (case-insensitive)
         target_lower = target.lower()
@@ -152,7 +195,7 @@ def render_markdown(content: str, vault_path: Path, note_path: Path, known_files
         else:
             return f'<a href="{href}">{alias}</a>'
 
-    content_with_links = WIKILINK_PATTERN.sub(replace_wikilink, content)
+    content_with_links = WIKILINK_PATTERN.sub(replace_wikilink, content_with_images)
 
     # Render markdown to HTML
     html = markdown2.markdown(
