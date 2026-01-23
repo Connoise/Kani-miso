@@ -162,7 +162,12 @@ class QueueManager:
 
     def get_pending(self, limit: int = None) -> List[Dict[str, Any]]:
         """
-        Get all pending captures.
+        Get all pending captures with prioritization.
+
+        Priority order:
+        1. Telegram messages and images (surface = 'mobile' or 'telegram', or has images)
+        2. Other captures
+        3. Tweets (type = 'Tweet' or surface = 'twitter-archive')
 
         Args:
             limit: Maximum number of captures to return
@@ -170,7 +175,22 @@ class QueueManager:
         Returns:
             List of capture dictionaries
         """
-        query = "SELECT * FROM captures WHERE status = 'pending' ORDER BY captured_at"
+        query = """
+            SELECT * FROM captures
+            WHERE status = 'pending'
+            ORDER BY
+                CASE
+                    -- Priority 1: Telegram messages and images
+                    WHEN surface IN ('mobile', 'telegram')
+                         OR image_paths IS NOT NULL
+                         OR attachments IS NOT NULL THEN 1
+                    -- Priority 3: Tweets (processed last)
+                    WHEN type = 'Tweet' OR surface = 'twitter-archive' THEN 3
+                    -- Priority 2: Everything else
+                    ELSE 2
+                END,
+                captured_at ASC
+        """
         if limit:
             query += f" LIMIT {limit}"
 
@@ -178,7 +198,7 @@ class QueueManager:
             cursor = conn.execute(query)
             captures = [dict(row) for row in cursor.fetchall()]
 
-        logger.info(f"Retrieved {len(captures)} pending captures")
+        logger.info(f"Retrieved {len(captures)} pending captures (prioritized: Telegram/images first, tweets last)")
         return captures
 
     def mark_processing(self, capture_id: int):

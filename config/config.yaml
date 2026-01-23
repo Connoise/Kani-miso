@@ -21,7 +21,7 @@ twitter:
   max_tweets_per_sync: 10  # Max tweets to fetch per sync
 
 processing:
-  batch_size: 50  # Max items to process in one run
+  batch_size: 500  # Max items to process in one run (increased for large tweet batches)
   auto_commit: true  # Create git commits automatically
   auto_push: false  # Require manual review before push
 
