@@ -33,37 +33,39 @@ You MUST NOT:
 
 ## Output format
 
+IMPORTANT: Output raw markdown directly. Do NOT wrap the output in code fences (```markdown or ```). The output must start with --- on line 1.
+
 Use the following structure:
 
-    ---
-    source: telegram
-    captured_at: <timestamp>
-    surface: mobile
-    capture_mode: quick
-    mood: <if provided>
-    tags: [raw]
-    ---
+---
+source: telegram
+captured_at: <timestamp>
+surface: mobile
+capture_mode: quick
+mood: <if provided>
+tags: [raw]
+---
 
-    # <Descriptive title>
+# <Descriptive title>
 
-    ## Raw Capture
-    <verbatim content>
+## Raw Capture
+<verbatim content>
 
-    ## Context
-    - Surface:
-    - Mood:
-    - Trigger:
-    - Constraints:
+## Context
+- Surface:
+- Mood:
+- Trigger:
+- Constraints:
 
-    ## Initial Interpretation
-    Tentative, cautious interpretation.
-    Use provisional language.
+## Initial Interpretation
+Tentative, cautious interpretation.
+Use provisional language.
 
-    ## Themes
-    - ...
+## Themes
+- ...
 
-    ## Related Hub Notes (Suggested)
-    - [[...]]
+## Related Hub Notes (Suggested)
+- [[...]]
 
 ---
 

@@ -19,6 +19,58 @@ logger = setup_logger(__name__)
 class FileWriter:
     """Handles writing processed captures to markdown files."""
 
+    @staticmethod
+    def strip_code_block_wrapper(content: str) -> str:
+        """
+        Remove markdown code block wrappers if present.
+
+        Some LLM responses incorrectly wrap the entire output in ```markdown ... ```
+        which breaks Obsidian's YAML frontmatter parsing.
+
+        Args:
+            content: Markdown content that may be wrapped in code fences
+
+        Returns:
+            Content with code block wrappers removed
+        """
+        content = content.strip()
+
+        # Check if content starts with ```markdown or ```
+        if content.startswith('```markdown'):
+            lines = content.split('\n')
+            # Remove the first line (```markdown)
+            if lines[0].strip() in ('```markdown', '```'):
+                lines = lines[1:]
+
+            # Find and remove the closing ```
+            for i in range(len(lines) - 1, -1, -1):
+                if lines[i].strip() == '```':
+                    # Include any content after ``` (edge case)
+                    trailing = lines[i+1:] if i + 1 < len(lines) else []
+                    lines = lines[:i]
+                    if trailing:
+                        trailing_text = '\n'.join(trailing).strip()
+                        if trailing_text:
+                            lines.append(trailing_text)
+                    break
+
+            content = '\n'.join(lines)
+
+        elif content.startswith('```'):
+            # Handle plain ``` wrapper
+            lines = content.split('\n')
+            if lines[0].strip() == '```':
+                lines = lines[1:]
+
+            for i in range(len(lines) - 1, -1, -1):
+                if lines[i].strip() == '```':
+                    lines = lines[:i]
+                    break
+
+            content = '\n'.join(lines)
+
+        return content
+
     def __init__(self, repo_root: Path, folders: Dict[str, str], notes_root: Path = None):
         """
         Initialize file writer.
@@ -118,6 +170,9 @@ class FileWriter:
         Returns:
             Path to created file
         """
+        # Strip any code block wrappers that Claude may have added
+        markdown_content = self.strip_code_block_wrapper(markdown_content)
+
         # Extract title from markdown
         title = self.extract_title_from_markdown(markdown_content)
 
