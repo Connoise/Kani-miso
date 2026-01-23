@@ -117,7 +117,7 @@ class HubAnalyzer:
         matches = re.findall(r'!\[\[([^\]]+\.(?:jpg|jpeg|png|gif|webp))\]\]', content, re.IGNORECASE)
         return matches
 
-    def analyze_and_suggest_hubs(self, limit_notes: int = 50) -> Dict[str, Any]:
+    def analyze_and_suggest_hubs(self, limit_notes: int = 500) -> Dict[str, Any]:
         """
         Analyze notes and suggest hubs for creation.
 
@@ -401,6 +401,256 @@ This hub does not assert a single definition or viewpoint.
 
         return updated
 
+    def find_unlinked_notes(self, limit_notes: int = 500) -> Dict[str, Any]:
+        """
+        Find notes that should be linked to existing hubs but aren't.
+
+        Args:
+            limit_notes: Maximum notes to analyze (for cost control)
+
+        Returns:
+            Dictionary mapping hub names to lists of unlinked note paths
+        """
+        logger.info("Finding unlinked notes for existing hubs...")
+
+        # Load all notes
+        notes = self._load_all_notes()
+
+        if not notes:
+            return {'error': 'No notes found'}
+
+        if not self.existing_hubs:
+            return {'error': 'No existing hubs found'}
+
+        # Limit notes if needed
+        if len(notes) > limit_notes:
+            logger.info(f"Limiting to {limit_notes} most recent notes")
+            notes = sorted(notes, key=lambda x: x['filename'], reverse=True)[:limit_notes]
+
+        logger.info(f"Analyzing {len(notes)} notes against {len(self.existing_hubs)} hubs...")
+
+        # Build summary of notes for Claude
+        notes_summary = self._build_notes_summary(notes)
+
+        # Ask Claude to match notes to existing hubs
+        suggestions = self._find_hub_matches(notes_summary, notes)
+
+        return suggestions
+
+    def _find_hub_matches(self, notes_summary: str, notes: List[Dict]) -> Dict[str, Any]:
+        """Use Claude to find which notes should link to which existing hubs."""
+
+        system_prompt = """You are analyzing a personal knowledge archive to connect notes to existing hub notes.
+
+The archive contains multiple types of content:
+- Notes: Traditional written notes and reflections
+- Tweets: Processed tweets from Twitter/X archives
+- Sources: External materials (articles, PDFs, etc.)
+- Images: Visual content embedded in notes
+
+Hubs are long-lived conceptual gathering places that represent recurring themes.
+
+Your task:
+1. For each existing hub, identify which notes are thematically related
+2. Only suggest connections where there's a clear conceptual fit
+3. Consider the note content, themes, and any images present
+4. Be conservative - only suggest strong matches
+
+Important:
+- Notes may already be linked to some hubs (check "Existing hub suggestions")
+- Only suggest NEW connections (don't repeat existing links)
+- A note can link to multiple hubs if truly relevant"""
+
+        user_message = f"""Match these notes to existing hubs.
+
+EXISTING HUBS:
+{', '.join(self.existing_hubs)}
+
+NOTES TO ANALYZE:
+{notes_summary}
+
+For each hub that has matching notes, respond in this format:
+
+HUB_MATCHES:
+---
+HUB: [Hub Name]
+REASON: [Why these notes relate to this hub]
+NOTE_COUNT: [Number of notes that should link]
+NOTES: [Comma-separated list of note paths that should link to this hub]
+CONFIDENCE: [high/medium/low]
+---
+
+Only include hubs that have at least 1 new note to link.
+Skip notes that already have the hub in "Existing hub suggestions"."""
+
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=8192,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}]
+            )
+
+            response_text = response.content[0].text
+            matches = self._parse_hub_matches(response_text, notes)
+
+            logger.info(f"Found matches for {len(matches)} hubs")
+            logger.info(f"Tokens used: {response.usage.input_tokens} in, {response.usage.output_tokens} out")
+
+            return {
+                'matches': matches,
+                'notes_analyzed': len(notes),
+                'hubs_checked': len(self.existing_hubs),
+            }
+
+        except Exception as e:
+            logger.error(f"Claude analysis failed: {e}")
+            return {'matches': [], 'error': str(e)}
+
+    def _parse_hub_matches(self, response_text: str, notes: List[Dict]) -> Dict[str, List[str]]:
+        """Parse Claude's hub matching response."""
+        matches = {}
+
+        # Split by --- delimiter
+        blocks = response_text.split('---')
+
+        for block in blocks:
+            if 'HUB:' not in block:
+                continue
+
+            # Extract hub name
+            hub_match = re.search(r'HUB:\s*(.+)', block)
+            if not hub_match:
+                continue
+
+            hub_name = hub_match.group(1).strip()
+
+            # Extract note paths
+            notes_match = re.search(r'NOTES:\s*(.+?)(?=\n[A-Z_]+:|$)', block, re.DOTALL)
+            if notes_match:
+                note_paths = [n.strip() for n in notes_match.group(1).split(',')]
+
+                # Filter out notes that already have this hub link
+                unlinked_notes = []
+                for note_path in note_paths:
+                    # Find the note
+                    note = next((n for n in notes if n['path'] == note_path.strip()), None)
+                    if note and f"[[{hub_name}]]" not in note['content']:
+                        unlinked_notes.append(note_path.strip())
+
+                if unlinked_notes:
+                    matches[hub_name] = unlinked_notes
+
+        return matches
+
+    def link_notes_to_existing_hubs(self, auto_link: bool = False, limit_notes: int = 500) -> Dict[str, Any]:
+        """
+        Find and optionally link notes to existing hubs.
+
+        Args:
+            auto_link: If True, automatically create links. If False, just return suggestions.
+            limit_notes: Maximum notes to analyze
+
+        Returns:
+            Dictionary with linking results
+        """
+        result = self.find_unlinked_notes(limit_notes=limit_notes)
+
+        if result.get('error'):
+            return result
+
+        matches = result.get('matches', {})
+
+        if not matches:
+            logger.info("No new hub links suggested")
+            return {'linked': {}, 'total_links': 0}
+
+        linked = {}
+        total_links = 0
+
+        if auto_link:
+            for hub_name, note_paths in matches.items():
+                logger.info(f"Linking {len(note_paths)} notes to hub: {hub_name}")
+                updated = self.link_notes_to_hub(hub_name, note_paths)
+                linked[hub_name] = updated
+                total_links += len(updated)
+        else:
+            # Just return suggestions without linking
+            for hub_name, note_paths in matches.items():
+                linked[hub_name] = note_paths
+                total_links += len(note_paths)
+
+        return {
+            'linked': linked,
+            'total_links': total_links,
+            'notes_analyzed': result.get('notes_analyzed', 0),
+            'hubs_checked': result.get('hubs_checked', 0),
+        }
+
+    def interactive_hub_linking(self, limit_notes: int = 500):
+        """Interactive mode for reviewing and linking notes to existing hubs."""
+        print("\n" + "=" * 60)
+        print("Hub Linker - Connect Notes to Existing Hubs")
+        print("=" * 60 + "\n")
+
+        # Find matches
+        print("Analyzing notes with Claude Opus 4.5...")
+        result = self.find_unlinked_notes(limit_notes=limit_notes)
+
+        if result.get('error'):
+            print(f"\n❌ Error: {result['error']}")
+            return
+
+        matches = result.get('matches', {})
+
+        if not matches:
+            print("\n✅ No new hub links suggested - your notes are well-connected!")
+            return
+
+        print(f"\n📊 Analyzed {result['notes_analyzed']} notes")
+        print(f"📁 Checked {result['hubs_checked']} existing hubs")
+        print(f"🔗 Found {len(matches)} hubs with new connections")
+
+        total_linked = 0
+
+        for i, (hub_name, note_paths) in enumerate(matches.items(), 1):
+            print("\n" + "-" * 60)
+            print(f"\n🏷️  HUB {i}/{len(matches)}: {hub_name}")
+            print(f"   New connections: {len(note_paths)} notes")
+            print(f"\n   NOTES:")
+            for note in note_paths[:10]:  # Show first 10
+                print(f"      - {note}")
+            if len(note_paths) > 10:
+                print(f"      ... and {len(note_paths) - 10} more")
+
+            # Ask for approval
+            print("\n   Options:")
+            print("   [y] Link these notes to this hub")
+            print("   [n] Skip this hub")
+            print("   [q] Quit")
+
+            choice = input("\n   Your choice: ").strip().lower()
+
+            if choice == 'q':
+                print("\n   Exiting...")
+                break
+            elif choice == 'y':
+                # Link notes
+                updated = self.link_notes_to_hub(hub_name, note_paths)
+                total_linked += len(updated)
+                print(f"   ✅ Linked {len(updated)} notes to [[{hub_name}]]")
+            else:
+                print("   ⏭️  Skipped")
+
+        # Summary
+        print("\n" + "=" * 60)
+        print("SUMMARY")
+        print("=" * 60)
+        print(f"Total links created: {total_linked}")
+        print("=" * 60 + "\n")
+
+        return {'total_linked': total_linked}
+
     def interactive_hub_creation(self):
         """Interactive mode for reviewing and creating suggested hubs."""
         print("\n" + "=" * 60)
@@ -486,12 +736,16 @@ def main():
 
     parser = argparse.ArgumentParser(description="Hub Analyzer")
     parser.add_argument('--analyze', '-a', action='store_true', help='Analyze only, no creation')
-    parser.add_argument('--limit', '-l', type=int, default=50, help='Max notes to analyze')
+    parser.add_argument('--link', action='store_true', help='Link notes to existing hubs')
+    parser.add_argument('--limit', '-l', type=int, default=500, help='Max notes to analyze')
     args = parser.parse_args()
 
     analyzer = HubAnalyzer()
 
-    if args.analyze:
+    if args.link:
+        # Link notes to existing hubs
+        analyzer.interactive_hub_linking(limit_notes=args.limit)
+    elif args.analyze:
         result = analyzer.analyze_and_suggest_hubs(limit_notes=args.limit)
         print("\n" + "=" * 60)
         print("HUB SUGGESTIONS (Analysis Only)")
