@@ -1,6 +1,6 @@
 """
 Hub Analyzer for Second Brain
-Analyzes notes and suggests hubs for creation using Claude.
+Analyzes notes, tweets, and images to suggest hubs for creation using Claude.
 """
 
 import os
@@ -50,7 +50,7 @@ class HubAnalyzer:
         self.model = self.config['claude']['model']
 
         # Note folders to analyze
-        self.note_folders = ['notes', 'reflections', 'sources']
+        self.note_folders = ['notes', 'reflections', 'sources', 'tweets']
 
         # Load existing hubs
         self.existing_hubs = self._load_existing_hubs()
@@ -108,6 +108,15 @@ class HubAnalyzer:
         matches = re.findall(r'\[\[([^\]]+)\]\]', content)
         return matches
 
+    def _extract_image_embeds(self, content: str) -> List[str]:
+        """Extract image embeds from content (e.g., ![[images/...]]).
+
+        Returns:
+            List of image paths found in the content
+        """
+        matches = re.findall(r'!\[\[([^\]]+\.(?:jpg|jpeg|png|gif|webp))\]\]', content, re.IGNORECASE)
+        return matches
+
     def analyze_and_suggest_hubs(self, limit_notes: int = 50) -> Dict[str, Any]:
         """
         Analyze notes and suggest hubs for creation.
@@ -159,12 +168,25 @@ class HubAnalyzer:
             hub_match = re.search(r'## Related Hub Notes.*?\n(.*?)(?=\n##|\Z)', content, re.DOTALL)
             suggested_hubs = hub_match.group(1).strip() if hub_match else ""
 
+            # Extract image embeds
+            images = self._extract_image_embeds(content)
+            images_info = f"Images: {len(images)} image(s)" if images else "Images: None"
+            if images:
+                images_info += f" ({', '.join([img.split('/')[-1] for img in images[:3]])})"
+                if len(images) > 3:
+                    images_info += f" + {len(images) - 3} more"
+
+            # Determine note type
+            note_type = "tweet" if note['folder'] == 'tweets' else note['folder']
+
             summaries.append(f"""
 Note: {note['path']}
 Title: {note['title']}
 Folder: {note['folder']}
+Type: {note_type}
 Themes: {themes}
 Content snippet: {raw[:300]}...
+{images_info}
 Existing hub suggestions: {suggested_hubs}
 ---""")
 
@@ -175,17 +197,24 @@ Existing hub suggestions: {suggested_hubs}
 
         system_prompt = """You are analyzing a personal knowledge archive to suggest hub notes.
 
+The archive contains multiple types of content:
+- Notes: Traditional written notes and reflections
+- Tweets: Processed tweets from Twitter/X archives
+- Sources: External materials (articles, PDFs, etc.)
+- Images: Visual content embedded in notes
+
 Hubs are long-lived conceptual gathering places that:
-- Represent recurring themes across multiple notes
+- Represent recurring themes across multiple notes (including tweets with images)
 - Are named as broad noun phrases (e.g., "Technology and Emotion", "Identity Formation")
 - Should NOT be single-use ideas or phrased interpretations
 - Should NOT resolve ambiguity or assert conclusions
 
 Your task:
-1. Identify concepts that recur across multiple notes
-2. Suggest hub names that follow the naming rules
-3. Explain WHY each hub should exist
-4. List which notes would connect to each hub
+1. Identify concepts that recur across multiple notes (including tweets and image-containing notes)
+2. Consider visual themes from images when they're present
+3. Suggest hub names that follow the naming rules
+4. Explain WHY each hub should exist
+5. List which notes would connect to each hub
 
 Be conservative - only suggest hubs where there's clear recurrence (3+ notes minimum)."""
 
