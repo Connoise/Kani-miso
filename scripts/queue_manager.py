@@ -72,7 +72,22 @@ class QueueManager:
             """)
 
             conn.commit()
+
+            # Run migrations for existing databases
+            self._run_migrations(conn)
+
             logger.info(f"Queue database initialized at {self.db_path}")
+
+    def _run_migrations(self, conn):
+        """Run database migrations to add new columns to existing tables."""
+        # Check if image_paths column exists in captures table
+        cursor = conn.execute("PRAGMA table_info(captures)")
+        columns = [row[1] for row in cursor.fetchall()]
+
+        if 'image_paths' not in columns:
+            logger.info("Migrating database: adding image_paths column to captures table")
+            conn.execute("ALTER TABLE captures ADD COLUMN image_paths TEXT")
+            conn.commit()
 
     @contextmanager
     def _get_connection(self):
