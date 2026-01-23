@@ -117,7 +117,7 @@ class HubAnalyzer:
         matches = re.findall(r'!\[\[([^\]]+\.(?:jpg|jpeg|png|gif|webp))\]\]', content, re.IGNORECASE)
         return matches
 
-    def analyze_and_suggest_hubs(self, limit_notes: int = 50) -> Dict[str, Any]:
+    def analyze_and_suggest_hubs(self, limit_notes: int = 500) -> Dict[str, Any]:
         """
         Analyze notes and suggest hubs for creation.
 
@@ -486,7 +486,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Hub Analyzer")
     parser.add_argument('--analyze', '-a', action='store_true', help='Analyze only, no creation')
-    parser.add_argument('--limit', '-l', type=int, default=50, help='Max notes to analyze')
+    parser.add_argument('--limit', '-l', type=int, default=500, help='Max notes to analyze')
     args = parser.parse_args()
 
     analyzer = HubAnalyzer()
