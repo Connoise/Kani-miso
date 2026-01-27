@@ -23,20 +23,43 @@ The analysis will be:
 
 ## 2. Folder Structure
 
+Each analysis run creates a **timestamped snapshot** in its own dated folder. This preserves history and allows comparison across time.
+
 ```
 /analysis/                              # Root analysis folder (new top-level)
 ├── _meta/                              # Analysis metadata and logs
 │   ├── analysis-runs.md                # Log of all analysis runs
 │   ├── methodology.md                  # Explanation of analysis approach
+│   ├── checkpoints/                    # Resume checkpoints for interrupted runs
 │   └── data-sources.md                 # What was included in each run
 │
+├── 2026-01/                            # Timestamped snapshot (YYYY-MM format)
+│   ├── manifest.yaml                   # What was included in this run
+│   ├── core-analysis/                  # Analysis documents for this run
+│   ├── pattern-analysis/
+│   ├── relational-analysis/
+│   ├── synthesis/
+│   ├── guidance/
+│   └── appendices/
+│
+├── 2026-07/                            # Later snapshot (6 months later)
+│   └── ...                             # Same structure
+│
+└── latest/                             # Symlink to most recent snapshot
+│
+### Snapshot Contents (within each dated folder)
+
+```
+2026-01/                                # Example timestamped snapshot
+├── manifest.yaml                       # Run metadata, content counts, sampling info
 ├── core-analysis/                      # Primary character analyses
 │   ├── psychological-profile.md        # Psychological patterns and traits
 │   ├── emotional-landscape.md          # Emotional patterns and tendencies
 │   ├── intellectual-portrait.md        # Thinking patterns and interests
 │   ├── ethical-framework.md            # Values, moral reasoning
 │   ├── spiritual-dimensions.md         # Meaning-making, existential themes
-│   └── philosophical-orientation.md    # Worldview, assumptions, beliefs
+│   ├── philosophical-orientation.md    # Worldview, assumptions, beliefs
+│   └── visual-patterns.md              # Analysis of images/photos (NEW)
 │
 ├── pattern-analysis/                   # Emergent patterns from data
 │   ├── recurring-themes.md             # Themes that appear repeatedly
@@ -68,12 +91,100 @@ The analysis will be:
     ├── evidence-citations.md           # Links to source notes for claims
     ├── confidence-levels.md            # Certainty ratings for insights
     ├── methodology-notes.md            # How conclusions were reached
+    ├── sampling-details.md             # What was sampled if content exceeded limits
     └── limitations.md                  # What the analysis cannot determine
 ```
 
 ---
 
-## 3. Analysis Dimensions
+## 3. Content Scope & Handling
+
+### 3.1 What Is Analyzed
+
+| Source | Included | Notes |
+|--------|----------|-------|
+| `/notes/` | ✅ Yes | Processed notes - primary content |
+| `/reflections/` | ✅ Yes | Diary-style notes - treated same as notes |
+| `/tweets/` | ✅ Yes | Imported tweets from Twitter archive |
+| `/images/` | ✅ Yes | Images analyzed via Claude vision |
+| `/hubs/` | ⚠️ Metadata only | Used for linking, not analyzed as content |
+| `/sources/` | ❌ No | External materials excluded - only personal writing counts |
+| `/inbox/` | ❌ No | Raw captures not yet processed |
+| `/archive/` | ❌ No | Frozen historical snapshots |
+
+### 3.2 Content Sampling Strategy
+
+When total content exceeds Claude's context window (~200K tokens), the function uses **stratified temporal sampling**:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SAMPLING STRATEGY                            │
+├─────────────────────────────────────────────────────────────────┤
+│  1. Calculate total token count of all content                  │
+│  2. If under limit: use all content                             │
+│  3. If over limit:                                              │
+│     a. Divide timeline into equal periods (e.g., months)        │
+│     b. Sample proportionally from each period                   │
+│     c. Prioritize:                                              │
+│        - Notes with more emotional content (reflections)        │
+│        - Notes that link to many hubs (high connectivity)       │
+│        - Longer notes (more signal)                             │
+│     d. Always include first and last 10% chronologically        │
+│  4. Document what was sampled in appendices/sampling-details.md │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Sampling transparency**: The output will clearly indicate:
+- Total content available vs. content analyzed
+- Sampling ratio applied
+- Which time periods may be underrepresented
+- Confidence adjustments due to sampling
+
+### 3.3 Image Analysis
+
+Images embedded in notes or stored in `/images/` are analyzed using Claude's vision capability:
+
+**What is analyzed:**
+- Subject matter (what is photographed)
+- Recurring visual themes (nature, people, urban, etc.)
+- Emotional tone of images
+- What types of moments are captured
+- Patterns in photography style
+- Absence patterns (what is never photographed)
+
+**Output**: `core-analysis/visual-patterns.md`
+
+### 3.4 Private Content Handling
+
+**Decision: Full transparency (no anonymization)**
+
+Private names, relationships, and sensitive situations are included as-is in the analysis output. Rationale:
+- The analysis is for personal use only
+- Anonymization would reduce insight quality
+- The user is the only intended reader
+- Full context is needed for accurate pattern recognition
+
+**Important**: The `/analysis/` folder should be excluded from any cloud sync or sharing if privacy is a concern.
+
+### 3.5 Minimum Data Thresholds
+
+The function runs regardless of data quantity, but adds confidence warnings:
+
+| Content Count | Behavior |
+|---------------|----------|
+| < 10 notes | ⚠️ "Extremely limited data" warning on all outputs |
+| 10-50 notes | ⚠️ "Limited data" warning, some analyses marked "insufficient" |
+| 50-200 notes | ⚠️ "Moderate data" - temporal patterns may be unreliable |
+| 200+ notes | ✅ Full analysis with standard confidence |
+
+Low-data warnings appear in:
+- Each document's frontmatter (`data_warning: limited`)
+- The methodology notes
+- Confidence levels for specific claims
+
+---
+
+## 4. Analysis Dimensions
 
 ### 3.1 Psychological Profile (`core-analysis/psychological-profile.md`)
 
@@ -369,8 +480,11 @@ personal_analysis/
 ├── collectors/
 │   ├── __init__.py
 │   ├── note_collector.py    # Collect notes from /notes/
+│   ├── reflection_collector.py  # Collect reflections from /reflections/
 │   ├── tweet_collector.py   # Collect tweets from /tweets/
-│   └── hub_collector.py     # Collect hubs for context
+│   ├── image_collector.py   # Collect images from /images/ and embedded
+│   ├── hub_collector.py     # Collect hub metadata (structure only)
+│   └── sampler.py           # Stratified sampling when over context limit
 ├── analyzers/
 │   ├── __init__.py
 │   ├── psychological.py     # Psychological analysis
@@ -379,6 +493,7 @@ personal_analysis/
 │   ├── ethical.py           # Ethical analysis
 │   ├── spiritual.py         # Spiritual analysis
 │   ├── philosophical.py     # Philosophical analysis
+│   ├── visual.py            # Visual/image patterns analysis
 │   ├── pattern.py           # Pattern analysis
 │   ├── relational.py        # Relational analysis
 │   └── synthesis.py         # Synthesis generation
@@ -389,7 +504,10 @@ personal_analysis/
 ├── prompts/
 │   ├── psychological.md     # Claude prompt for psychological analysis
 │   ├── emotional.md         # Claude prompt for emotional analysis
+│   ├── visual.md            # Claude prompt for image analysis
 │   └── ...                  # One per analysis type
+├── checkpoint.py            # Checkpoint save/load/resume logic
+├── cost_estimator.py        # Token counting and cost estimation
 └── config.py                # Analysis configuration
 ```
 
@@ -619,7 +737,31 @@ For each area:
 Output in structured markdown with clear sections.
 ```
 
-### 9.3 Hidden Truths Prompt
+### 9.3 Visual Patterns Prompt
+
+```markdown
+Analyze the images captured by this person to understand visual patterns in their life.
+
+Focus on:
+1. **Subject matter** - What do they photograph? (people, places, objects, nature, etc.)
+2. **Recurring visual themes** - What appears again and again?
+3. **Emotional tone** - Do images convey joy, melancholy, curiosity, anxiety?
+4. **Moments captured** - What kinds of moments are deemed worth preserving?
+5. **Composition patterns** - Close-ups vs landscapes, centered vs off-center, etc.
+6. **Notable absences** - What is never photographed that you might expect?
+7. **Context clues** - What do images reveal about lifestyle, environment, relationships?
+8. **Change over time** - How has visual focus shifted (if dates available)?
+
+For each finding:
+- Describe the pattern clearly
+- Reference specific images when possible
+- Note confidence level
+- Connect to broader character insights if applicable
+
+Output in structured markdown with clear sections.
+```
+
+### 9.4 Hidden Truths Prompt
 
 ```markdown
 Based on all the analyses conducted, identify truths about this person that they
@@ -707,26 +849,43 @@ Use tags for cross-referencing:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
+│                     PRE-FLIGHT PHASE                            │
+├─────────────────────────────────────────────────────────────────┤
+│  1. Check for existing checkpoint (offer resume if found)       │
+│  2. Scan content directories for file counts                    │
+│  3. Estimate token counts and API costs                         │
+│  4. Display cost estimate and require confirmation              │
+│  5. Create timestamped output folder (e.g., /analysis/2026-01/) │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
 │                        COLLECTION PHASE                         │
 ├─────────────────────────────────────────────────────────────────┤
 │  1. Collect all notes from /notes/                              │
-│  2. Collect all tweets from /tweets/                            │
-│  3. Collect all hubs from /hubs/ (for context)                  │
-│  4. Parse and structure content                                 │
-│  5. Create collection manifest                                  │
+│  2. Collect all reflections from /reflections/                  │
+│  3. Collect all tweets from /tweets/                            │
+│  4. Collect all images from /images/ and embedded in notes      │
+│  5. Collect hub metadata from /hubs/ (structure only)           │
+│  6. Apply sampling if content exceeds context limits            │
+│  7. Parse and structure content                                 │
+│  8. Create collection manifest                                  │
+│  9. Save checkpoint: "collection_complete"                      │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      CORE ANALYSIS PHASE                        │
 ├─────────────────────────────────────────────────────────────────┤
-│  Run in parallel (6 Claude API calls):                          │
+│  Run in parallel (7 Claude API calls):                          │
 │  ├── Psychological analysis                                     │
 │  ├── Emotional analysis                                         │
 │  ├── Intellectual analysis                                      │
 │  ├── Ethical analysis                                           │
 │  ├── Spiritual analysis                                         │
-│  └── Philosophical analysis                                     │
+│  ├── Philosophical analysis                                     │
+│  └── Visual patterns analysis (images)                          │
+│  Save checkpoint: "core_analysis_complete"                      │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
                            ▼
@@ -739,6 +898,7 @@ Use tags for cross-referencing:
 │  ├── Contradiction mapping                                      │
 │  ├── Blind spot identification                                  │
 │  └── Obsessions and avoidances                                  │
+│  Save checkpoint: "pattern_analysis_complete"                   │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
                            ▼
@@ -750,6 +910,7 @@ Use tags for cross-referencing:
 │  ├── Communication patterns                                     │
 │  ├── Relationship dynamics                                      │
 │  └── Social presentation                                        │
+│  Save checkpoint: "relational_analysis_complete"                │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
                            ▼
@@ -761,6 +922,7 @@ Use tags for cross-referencing:
 │  2. Extract hidden truths                                       │
 │  3. Map core tensions                                           │
 │  4. Distill essence                                             │
+│  Save checkpoint: "synthesis_complete"                          │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
                            ▼
@@ -773,6 +935,7 @@ Use tags for cross-referencing:
 │  3. Map strength amplification                                  │
 │  4. Document warning signs                                      │
 │  5. Generate actionable practices                               │
+│  Save checkpoint: "guidance_complete"                           │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
                            ▼
@@ -783,8 +946,11 @@ Use tags for cross-referencing:
 │  2. Create evidence citations document                          │
 │  3. Write confidence levels document                            │
 │  4. Write methodology notes                                     │
-│  5. Write limitations document                                  │
-│  6. Update analysis-runs.md log                                 │
+│  5. Write sampling details (if applicable)                      │
+│  6. Write limitations document                                  │
+│  7. Update /analysis/_meta/analysis-runs.md log                 │
+│  8. Update /analysis/latest symlink                             │
+│  9. Delete checkpoint file (run complete)                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -792,14 +958,83 @@ Use tags for cross-referencing:
 
 | Phase | Calls | Est. Tokens In | Est. Tokens Out |
 |-------|-------|----------------|-----------------|
-| Core Analysis | 6 | ~100K each | ~8K each |
+| Core Analysis | 7 | ~100K each | ~8K each |
 | Pattern Analysis | 5 | ~100K each | ~6K each |
 | Relational Analysis | 4 | ~100K each | ~5K each |
 | Synthesis | 4 | ~50K each | ~10K each |
 | Guidance | 5 | ~50K each | ~8K each |
-| **Total** | **24** | **~2M** | **~170K** |
+| **Total** | **25** | **~2.1M** | **~180K** |
 
-*Estimates assume ~1000 notes + ~3000 tweets*
+*Estimates assume ~1000 notes + ~500 reflections + ~3000 tweets + ~200 images*
+
+### 11.3 Cost Estimation & Confirmation
+
+Before running, the function displays a cost estimate and requires confirmation:
+
+```
+═══════════════════════════════════════════════════════════════════
+                    PERSONAL ANALYSIS - COST ESTIMATE
+═══════════════════════════════════════════════════════════════════
+
+Content detected:
+  • Notes:        847 files (~320K tokens)
+  • Reflections:  234 files (~95K tokens)
+  • Tweets:      2,341 items (~180K tokens)
+  • Images:        156 files (~150K tokens)
+  ─────────────────────────────────
+  Total:         ~745K tokens
+
+Sampling: Not required (under context limit)
+
+Estimated API calls: 25
+Estimated input tokens: ~2.1M (with repetition across calls)
+Estimated output tokens: ~180K
+
+───────────────────────────────────────────────────────────────────
+ESTIMATED COST: $38.50 - $52.00 (depending on caching)
+───────────────────────────────────────────────────────────────────
+
+Proceed with analysis? [y/N]:
+```
+
+### 11.4 Checkpoint & Resume System
+
+Checkpoints are saved to `/analysis/_meta/checkpoints/` and enable resuming interrupted runs:
+
+```python
+# Checkpoint structure
+checkpoint = {
+    "run_id": "2026-01-27T14:30:00Z",
+    "output_folder": "/analysis/2026-01/",
+    "phase": "pattern_analysis_complete",
+    "completed_analyses": [
+        "psychological", "emotional", "intellectual",
+        "ethical", "spiritual", "philosophical", "visual",
+        "recurring_themes", "temporal_patterns"
+    ],
+    "pending_analyses": [
+        "contradiction_mapping", "blind_spots", "obsessions_avoidances"
+    ],
+    "collected_content_hash": "sha256:abc123...",
+    "partial_results": { ... }
+}
+```
+
+**Resume behavior:**
+```bash
+$ python -m scripts.personal_analysis.analyzer
+
+Found incomplete analysis from 2026-01-27T14:30:00Z
+  • Phase: pattern_analysis (3/5 complete)
+  • Estimated remaining cost: $12.00
+
+Options:
+  [r] Resume from checkpoint
+  [n] Start new analysis (discards partial results)
+  [c] Cancel
+
+Choice:
+```
 
 ---
 
@@ -808,7 +1043,7 @@ Use tags for cross-referencing:
 ### 12.1 Analysis Config (`config.py`)
 
 ```python
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List
 
@@ -818,12 +1053,24 @@ class AnalysisConfig:
     notes_root: Path
     output_root: Path  # /analysis/
 
-    # Content selection
-    include_notes: bool = True
-    include_tweets: bool = True
-    include_hubs_as_context: bool = True
+    # Content selection (based on clarifications)
+    include_notes: bool = True           # /notes/
+    include_reflections: bool = True     # /reflections/ - treated same as notes
+    include_tweets: bool = True          # /tweets/
+    include_images: bool = True          # /images/ and embedded images
+    include_sources: bool = False        # /sources/ - EXCLUDED (external materials)
+    hub_usage: str = "metadata_only"     # "metadata_only" | "exclude"
     date_range_start: Optional[str] = None  # ISO date
     date_range_end: Optional[str] = None
+
+    # Sampling (when content exceeds context limits)
+    max_context_tokens: int = 180000     # Leave headroom from 200K limit
+    sampling_strategy: str = "stratified_temporal"  # Only option currently
+    sampling_prioritize: List[str] = field(default_factory=lambda: [
+        "emotional_content",  # Reflections weighted higher
+        "hub_connectivity",   # Well-linked notes prioritized
+        "content_length"      # Longer notes have more signal
+    ])
 
     # Analysis options
     dimensions: List[str] = None  # None = all
@@ -838,28 +1085,51 @@ class AnalysisConfig:
     # Output options
     include_evidence_links: bool = True
     confidence_threshold: str = "low"  # Include all
+    output_format: str = "timestamped"  # "timestamped" creates /analysis/YYYY-MM/
+
+    # Cost and confirmation
+    require_cost_confirmation: bool = True
+    max_budget: Optional[float] = None  # None = no limit, else max USD
+
+    # Checkpointing
+    enable_checkpoints: bool = True
+    checkpoint_dir: Path = None  # Defaults to /analysis/_meta/checkpoints/
 
     # Safety
-    dry_run: bool = False  # Preview without writing
+    dry_run: bool = False  # Preview without writing or API calls
 ```
 
 ### 12.2 CLI Interface
 
 ```bash
-# Full analysis
+# Full analysis (will prompt for cost confirmation)
 python -m scripts.personal_analysis.analyzer
 
+# Resume interrupted analysis
+python -m scripts.personal_analysis.analyzer --resume
+
 # Specific dimensions only
-python -m scripts.personal_analysis.analyzer --dimensions psychological,emotional
+python -m scripts.personal_analysis.analyzer --dimensions psychological,emotional,visual
 
 # Date range
 python -m scripts.personal_analysis.analyzer --since 2025-01-01 --until 2026-01-01
 
-# Dry run (preview)
+# Dry run (preview content and cost, no API calls)
 python -m scripts.personal_analysis.analyzer --dry-run
 
-# Notes only (no tweets)
+# Content selection
 python -m scripts.personal_analysis.analyzer --no-tweets
+python -m scripts.personal_analysis.analyzer --no-images
+python -m scripts.personal_analysis.analyzer --no-reflections
+
+# Skip cost confirmation (for automation)
+python -m scripts.personal_analysis.analyzer --yes
+
+# Set maximum budget
+python -m scripts.personal_analysis.analyzer --max-budget 50.00
+
+# Force new analysis (ignore existing checkpoint)
+python -m scripts.personal_analysis.analyzer --force-new
 ```
 
 ---
@@ -1050,8 +1320,14 @@ I struggle with too?" This could transform criticism into self-compassion.
 ### Milestone 1: Foundation
 - [ ] Create folder structure
 - [ ] Implement NoteCollector
+- [ ] Implement ReflectionCollector
 - [ ] Implement TweetCollector
+- [ ] Implement ImageCollector
+- [ ] Implement HubCollector (metadata only)
+- [ ] Implement ContentSampler (stratified temporal sampling)
 - [ ] Create base AnalysisClaudeClient
+- [ ] Implement CostEstimator
+- [ ] Implement CheckpointManager
 - [ ] Write master system prompt
 
 ### Milestone 2: Core Analysis
@@ -1061,6 +1337,7 @@ I struggle with too?" This could transform criticism into self-compassion.
 - [ ] Implement ethical analyzer
 - [ ] Implement spiritual analyzer
 - [ ] Implement philosophical analyzer
+- [ ] Implement visual patterns analyzer (images)
 
 ### Milestone 3: Pattern Analysis
 - [ ] Implement recurring themes analyzer
@@ -1115,6 +1392,27 @@ This analysis function aligns with Second-Brian's core principles:
 | Hubs are places | Analysis documents become their own navigational landmarks |
 | Contradictions are signals | Contradiction map specifically captures these |
 | User is final authority | Guidance offered, not mandated |
+
+---
+
+## 18. Design Decisions Log
+
+This section documents key design decisions made during planning.
+
+### 2026-01-27: Initial Clarifications
+
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| **Context window overflow** | Stratified temporal sampling | Preserves representation across full timeline; prioritizes emotional content and well-linked notes |
+| **Reflections folder** | Include, treat same as notes | Reflections contain valuable emotional signal; no reason to exclude |
+| **Re-run behavior** | Timestamped snapshots (`/analysis/YYYY-MM/`) | Preserves history; enables comparison across time; aligns with Second-Brian preservation philosophy |
+| **Minimum data threshold** | Run anyway with warnings | User may still gain value from limited analysis; explicit confidence warnings manage expectations |
+| **Private content** | Include as-is, no anonymization | Analysis is personal; anonymization reduces insight quality; user is sole reader |
+| **Image analysis** | Include via Claude vision | Photos reveal patterns invisible in text; visual self-expression is meaningful |
+| **Cost confirmation** | Required before running | Prevents surprise charges; transparency about resource usage |
+| **Error recovery** | Checkpoint and resume | Long-running analysis shouldn't lose partial progress; cost-efficient |
+| **Hub content** | Metadata only (for linking) | Hubs are structural, not content; analyzing them would conflate architecture with expression |
+| **Sources folder** | Excluded | Only personal writing analyzed; external materials don't reveal the self directly |
 
 ---
 
