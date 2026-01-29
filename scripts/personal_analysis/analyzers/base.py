@@ -15,7 +15,7 @@ import logging
 import anthropic
 
 from ..config import AnalysisConfig
-from ..models import CollectedContent, AnalysisResult, Image
+from ..models import CollectedContent, AnalysisResult, Image, Extraction
 
 logger = logging.getLogger(__name__)
 
@@ -116,34 +116,37 @@ Use Obsidian-compatible formatting:
         self,
         content: CollectedContent,
         images: Optional[List[Image]] = None,
+        extraction: Optional[Extraction] = None,
     ) -> AnalysisResult:
         """
         Run the analysis on the given content.
 
         Args:
-            content: Collected content to analyze
+            content: Collected content to analyze (used if no extraction)
             images: Optional list of images for visual analysis
+            extraction: Optional extraction to use instead of full content
 
         Returns:
             AnalysisResult with the generated analysis
         """
-        logger.info(f"Starting {self.dimension} analysis")
+        # Determine which model to use based on dimension
+        model = self.config.get_model_for_dimension(self.dimension)
+        logger.info(f"Starting {self.dimension} analysis with model {model.split('-')[1]}")
 
         try:
-            # Build messages
-            messages = self._build_messages(content, images)
+            # Build messages - use extraction if available
+            messages = self._build_messages(content, images, extraction)
 
-            # Call Claude API
-            response = self.client.messages.create(
-                model=self.config.model,
-                max_tokens=self.config.max_output_tokens,
-                thinking={
-                    "type": "enabled",
-                    "budget_tokens": self.config.thinking_budget,
-                },
-                system=self.MASTER_SYSTEM_PROMPT,
-                messages=messages,
-            )
+            # Build API call kwargs
+            api_kwargs = {
+                "model": model,
+                "max_tokens": self.config.max_output_tokens,
+                "system": self.MASTER_SYSTEM_PROMPT,
+                "messages": messages,
+            }
+
+            # Use streaming to handle potentially long operations
+            response = self._call_with_streaming(api_kwargs)
 
             # Extract content and metadata
             analysis_content = self._extract_content(response)
@@ -191,14 +194,36 @@ Use Obsidian-compatible formatting:
                 is_partial=True,
             )
 
+    def _call_with_streaming(self, api_kwargs: Dict[str, Any]):
+        """
+        Make API call with streaming to handle long operations.
+
+        The Anthropic SDK requires streaming for requests that may take >10 minutes.
+        Returns the final message response.
+        """
+        with self.client.messages.stream(**api_kwargs) as stream:
+            for event in stream:
+                pass  # Consume the stream
+
+            # Get the final message
+            response = stream.get_final_message()
+
+        return response
+
     def _build_messages(
         self,
         content: CollectedContent,
         images: Optional[List[Image]] = None,
+        extraction: Optional[Extraction] = None,
     ) -> List[Dict[str, Any]]:
         """Build the messages array for the API call."""
-        # Start with the content
-        content_text = content.to_analysis_text()
+        # Use extraction if available, otherwise use full content
+        if extraction and extraction.content and not extraction.content.startswith("[Extraction failed"):
+            content_text = extraction.content
+            content_label = "extracted key information"
+        else:
+            content_text = content.to_analysis_text()
+            content_label = "content"
 
         # Build the user message
         user_content = []
@@ -206,7 +231,7 @@ Use Obsidian-compatible formatting:
         # Add text content
         user_content.append({
             "type": "text",
-            "text": f"""Here is the content to analyze:
+            "text": f"""Here is the {content_label} to analyze:
 
 {content_text}
 

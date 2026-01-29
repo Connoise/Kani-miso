@@ -18,7 +18,7 @@ import sys
 import anthropic
 
 from .config import AnalysisConfig
-from .models import CollectedContent, AnalysisResult, FullAnalysisResult, Image
+from .models import CollectedContent, AnalysisResult, FullAnalysisResult, Image, Extraction
 from .cost_estimator import CostEstimator, CostEstimate
 from .checkpoint import CheckpointManager, AnalysisPhase
 from .collectors import (
@@ -41,6 +41,7 @@ from .analyzers import (
 from .analyzers.pattern import PatternAnalyzer
 from .analyzers.relational import RelationalAnalyzer
 from .analyzers.synthesis import SynthesisAnalyzer
+from .analyzers.extraction import ExtractionAnalyzer
 from .generators import ObsidianMarkdownGenerator
 
 # Set up logging
@@ -73,6 +74,7 @@ class PersonalAnalyzer:
 
         # Analysis results storage
         self.content: Optional[CollectedContent] = None
+        self.extraction: Optional[Extraction] = None  # Two-phase extraction result
         self.core_results: Dict[str, AnalysisResult] = {}
         self.pattern_results: Dict[str, AnalysisResult] = {}
         self.relational_results: Dict[str, AnalysisResult] = {}
@@ -111,11 +113,11 @@ class PersonalAnalyzer:
         logger.info("Starting new analysis")
 
         # Phase 1: Collection
-        print("\n📥 Collecting content...")
+        print("\n[*] Collecting content...")
         self.content = self._collect_content()
 
         if self.content.total_items == 0:
-            print("❌ No content found to analyze.")
+            print("[X] No content found to analyze.")
             return None
 
         # Cost estimation and confirmation
@@ -123,7 +125,7 @@ class PersonalAnalyzer:
 
         if self.config.dry_run:
             print(self.cost_estimator.format_estimate(estimate))
-            print("\n🔍 DRY RUN - No API calls will be made.")
+            print("\n[?] DRY RUN - No API calls will be made.")
             return None
 
         if self.config.require_cost_confirmation and not self.config.skip_confirmation:
@@ -133,7 +135,7 @@ class PersonalAnalyzer:
 
         # Apply sampling if needed
         if estimate.requires_sampling:
-            print("\n✂️ Sampling content (exceeds context limits)...")
+            print("\n[~] Sampling content (exceeds context limits)...")
             sampler = ContentSampler(self.config.max_context_tokens)
             result = sampler.sample_if_needed(self.content)
             self.content = result.content
@@ -142,41 +144,51 @@ class PersonalAnalyzer:
         output_folder.mkdir(parents=True, exist_ok=True)
         self._save_checkpoint(run_id, output_folder, AnalysisPhase.COLLECTION)
 
+        # Phase 1.5: Extraction (if enabled)
+        if self.config.use_extraction_phase:
+            print("\n[E] Extracting key information (phase 1)...")
+            self.extraction = self._run_extraction()
+            if self.extraction:
+                compression = self.extraction.compression_ratio
+                print(f"  + Extraction complete ({compression:.0%} of original size)")
+                print(f"    Input: {self.extraction.input_tokens:,} tokens")
+                print(f"    Output: {self.extraction.output_tokens:,} tokens")
+
         # Phase 2: Core Analysis
-        print("\n🧠 Running core analyses...")
+        print("\n[C] Running core analyses...")
         self.core_results = self._run_core_analysis()
         self._save_checkpoint(run_id, output_folder, AnalysisPhase.CORE_ANALYSIS)
 
         # Phase 3: Pattern Analysis
-        print("\n🔍 Running pattern analyses...")
+        print("\n[?] Running pattern analyses...")
         self.pattern_results = self._run_pattern_analysis()
         self._save_checkpoint(run_id, output_folder, AnalysisPhase.PATTERN_ANALYSIS)
 
         # Phase 4: Relational Analysis
-        print("\n👥 Running relational analyses...")
+        print("\n[R] Running relational analyses...")
         self.relational_results = self._run_relational_analysis()
         self._save_checkpoint(run_id, output_folder, AnalysisPhase.RELATIONAL_ANALYSIS)
 
         # Phase 5: Synthesis
         if self.config.generate_synthesis:
-            print("\n🔮 Generating synthesis...")
+            print("\n[S] Generating synthesis...")
             self.synthesis_results = self._run_synthesis()
             self._save_checkpoint(run_id, output_folder, AnalysisPhase.SYNTHESIS)
 
         # Phase 6: Guidance
         if self.config.generate_guidance:
-            print("\n💡 Generating guidance...")
+            print("\n[G] Generating guidance...")
             self.guidance_results = self._run_guidance()
             self._save_checkpoint(run_id, output_folder, AnalysisPhase.GUIDANCE)
 
         # Phase 7: Output
-        print("\n📝 Writing output files...")
+        print("\n[W] Writing output files...")
         full_result = self._generate_outputs(run_id, output_folder)
 
         # Clean up checkpoint
         self.checkpoint_manager.delete_checkpoint()
 
-        print(f"\n✅ Analysis complete! Output written to: {output_folder}")
+        print(f"\n[OK] Analysis complete! Output written to: {output_folder}")
         return full_result
 
     def _collect_content(self) -> CollectedContent:
@@ -240,6 +252,12 @@ class PersonalAnalyzer:
             hubs=hubs,
         )
 
+    def _run_extraction(self) -> Optional[Extraction]:
+        """Run the extraction phase to compress content for subsequent analyses."""
+        extractor = ExtractionAnalyzer(self.config, self.client)
+        images = self.content.images if self.config.include_images else None
+        return extractor.extract(self.content, images)
+
     def _run_core_analysis(self) -> Dict[str, AnalysisResult]:
         """Run core analysis dimensions in parallel."""
         analyzers = []
@@ -286,14 +304,18 @@ class PersonalAnalyzer:
         # Prepare images for visual analyzer
         images = self.content.images if self.config.include_images else None
 
+        # Use extraction if available
+        extraction = self.extraction
+
         def run_analyzer(analyzer):
             dim = analyzer.dimension
-            print(f"  Running {dim}...")
+            model_name = self.config.get_model_for_dimension(dim).split('-')[1]
+            print(f"  Running {dim} ({model_name})...")
             if hasattr(analyzer, "_uses_images") and analyzer._uses_images():
-                result = analyzer.analyze(self.content, images)
+                result = analyzer.analyze(self.content, images, extraction)
             else:
-                result = analyzer.analyze(self.content)
-            print(f"  ✓ {dim} complete (confidence: {result.confidence})")
+                result = analyzer.analyze(self.content, extraction=extraction)
+            print(f"  + {dim} complete (confidence: {result.confidence})")
             return dim, result
 
         # Run in parallel with limited concurrency to avoid rate limits
@@ -313,13 +335,14 @@ class PersonalAnalyzer:
         synthesis_types = ["unified_portrait", "hidden_truths", "core_tensions", "essence_distillation"]
 
         for synthesis_type in synthesis_types:
-            print(f"  Running {synthesis_type}...")
+            model_name = self.config.get_model_for_dimension(synthesis_type).split('-')[1]
+            print(f"  Running {synthesis_type} ({model_name})...")
             analyzer = SynthesisAnalyzer(self.config, self.client, synthesis_type)
             analyzer.set_previous_analyses(all_previous)
-            result = analyzer.analyze(self.content)
+            result = analyzer.analyze(self.content, extraction=self.extraction)
             results[synthesis_type] = result
             all_previous[synthesis_type] = result  # Available for next synthesis
-            print(f"  ✓ {synthesis_type} complete")
+            print(f"  + {synthesis_type} complete")
 
         return results
 
@@ -336,12 +359,13 @@ class PersonalAnalyzer:
         guidance_types = ["growth_opportunities", "shadow_work", "strength_amplification", "warning_signs", "actionable_practices"]
 
         for guidance_type in guidance_types:
-            print(f"  Running {guidance_type}...")
+            model_name = self.config.get_model_for_dimension(guidance_type).split('-')[1]
+            print(f"  Running {guidance_type} ({model_name})...")
             analyzer = SynthesisAnalyzer(self.config, self.client, guidance_type)
             analyzer.set_previous_analyses(all_previous)
-            result = analyzer.analyze(self.content)
+            result = analyzer.analyze(self.content, extraction=self.extraction)
             results[guidance_type] = result
-            print(f"  ✓ {guidance_type} complete")
+            print(f"  + {guidance_type} complete")
 
         return results
 
@@ -468,7 +492,7 @@ class PersonalAnalyzer:
 
         # Validate content hash
         if not self.checkpoint_manager.validate_checkpoint(checkpoint, self.content):
-            print("⚠️ Content has changed since checkpoint. Starting fresh.")
+            print("[!] Content has changed since checkpoint. Starting fresh.")
             self.checkpoint_manager.delete_checkpoint()
             return self.run(force_new=True)
 
@@ -504,21 +528,21 @@ class PersonalAnalyzer:
 
     def _continue_from_core(self, run_id: str, output_folder: Path) -> FullAnalysisResult:
         """Continue from core analysis phase."""
-        print("\n🧠 Running core analyses...")
+        print("\n[C] Running core analyses...")
         self.core_results = self._run_core_analysis()
         self._save_checkpoint(run_id, output_folder, AnalysisPhase.CORE_ANALYSIS)
         return self._continue_from_pattern(run_id, output_folder)
 
     def _continue_from_pattern(self, run_id: str, output_folder: Path) -> FullAnalysisResult:
         """Continue from pattern analysis phase."""
-        print("\n🔍 Running pattern analyses...")
+        print("\n[?] Running pattern analyses...")
         self.pattern_results = self._run_pattern_analysis()
         self._save_checkpoint(run_id, output_folder, AnalysisPhase.PATTERN_ANALYSIS)
         return self._continue_from_relational(run_id, output_folder)
 
     def _continue_from_relational(self, run_id: str, output_folder: Path) -> FullAnalysisResult:
         """Continue from relational analysis phase."""
-        print("\n👥 Running relational analyses...")
+        print("\n[R] Running relational analyses...")
         self.relational_results = self._run_relational_analysis()
         self._save_checkpoint(run_id, output_folder, AnalysisPhase.RELATIONAL_ANALYSIS)
         return self._continue_from_synthesis(run_id, output_folder)
@@ -526,7 +550,7 @@ class PersonalAnalyzer:
     def _continue_from_synthesis(self, run_id: str, output_folder: Path) -> FullAnalysisResult:
         """Continue from synthesis phase."""
         if self.config.generate_synthesis:
-            print("\n🔮 Generating synthesis...")
+            print("\n[S] Generating synthesis...")
             self.synthesis_results = self._run_synthesis()
             self._save_checkpoint(run_id, output_folder, AnalysisPhase.SYNTHESIS)
         return self._continue_from_guidance(run_id, output_folder)
@@ -534,17 +558,17 @@ class PersonalAnalyzer:
     def _continue_from_guidance(self, run_id: str, output_folder: Path) -> FullAnalysisResult:
         """Continue from guidance phase."""
         if self.config.generate_guidance:
-            print("\n💡 Generating guidance...")
+            print("\n[G] Generating guidance...")
             self.guidance_results = self._run_guidance()
             self._save_checkpoint(run_id, output_folder, AnalysisPhase.GUIDANCE)
         return self._continue_from_output(run_id, output_folder)
 
     def _continue_from_output(self, run_id: str, output_folder: Path) -> FullAnalysisResult:
         """Continue from output phase."""
-        print("\n📝 Writing output files...")
+        print("\n[W] Writing output files...")
         full_result = self._generate_outputs(run_id, output_folder)
         self.checkpoint_manager.delete_checkpoint()
-        print(f"\n✅ Analysis complete! Output written to: {output_folder}")
+        print(f"\n[OK] Analysis complete! Output written to: {output_folder}")
         return full_result
 
     def _config_to_dict(self) -> Dict:
@@ -630,6 +654,26 @@ def main():
         action="store_true",
         help="Force new analysis, ignoring any checkpoint",
     )
+    parser.add_argument(
+        "--no-extraction",
+        action="store_true",
+        help="Disable two-phase extraction (use full content for each analysis)",
+    )
+    parser.add_argument(
+        "--no-model-tiers",
+        action="store_true",
+        help="Disable model tiers (use Opus for all analyses)",
+    )
+    parser.add_argument(
+        "--all-opus",
+        action="store_true",
+        help="Use Opus for all analyses (alias for --no-model-tiers)",
+    )
+    parser.add_argument(
+        "--all-sonnet",
+        action="store_true",
+        help="Use Sonnet for all analyses (cheaper but less nuanced)",
+    )
 
     args = parser.parse_args()
 
@@ -642,7 +686,15 @@ def main():
         dry_run=args.dry_run,
         skip_confirmation=args.yes,
         max_budget=args.max_budget,
+        use_extraction_phase=not args.no_extraction,
+        use_model_tiers=not (args.no_model_tiers or args.all_opus or args.all_sonnet),
     )
+
+    # Handle --all-sonnet flag
+    if args.all_sonnet:
+        from .config import MODEL_SONNET
+        config.model = MODEL_SONNET
+        config.extraction_model = MODEL_SONNET
 
     if args.dimensions:
         config.dimensions = args.dimensions.split(",")

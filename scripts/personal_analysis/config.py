@@ -13,8 +13,56 @@ accepted by the user before running analysis.
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Set
 from datetime import datetime
+
+
+# Pricing constants (as of 2026-01)
+CLAUDE_OPUS_INPUT_PRICE_PER_1M = 15.00  # USD per 1M input tokens
+CLAUDE_OPUS_OUTPUT_PRICE_PER_1M = 75.00  # USD per 1M output tokens
+CLAUDE_OPUS_CACHED_INPUT_PRICE_PER_1M = 1.50  # USD per 1M cached input tokens
+
+CLAUDE_SONNET_INPUT_PRICE_PER_1M = 3.00  # USD per 1M input tokens
+CLAUDE_SONNET_OUTPUT_PRICE_PER_1M = 15.00  # USD per 1M output tokens
+CLAUDE_SONNET_CACHED_INPUT_PRICE_PER_1M = 0.30  # USD per 1M cached input tokens
+
+# Model identifiers
+MODEL_OPUS = "claude-opus-4-5-20251101"
+MODEL_SONNET = "claude-sonnet-4-20250514"
+
+# Default model tiers - which dimensions use which model
+# Tier 1 (Opus): Complex synthesis, deep psychological analysis
+# Tier 2 (Sonnet): Pattern detection, simpler dimensional analyses
+DEFAULT_OPUS_DIMENSIONS: Set[str] = {
+    "psychological",
+    "emotional",
+    "philosophical",
+    "unified_portrait",
+    "hidden_truths",
+    "core_tensions",
+    "essence_distillation",
+    "growth_opportunities",
+    "shadow_work",
+}
+
+DEFAULT_SONNET_DIMENSIONS: Set[str] = {
+    "intellectual",
+    "ethical",
+    "spiritual",
+    "visual",
+    "recurring_themes",
+    "temporal_patterns",
+    "contradiction_map",
+    "blind_spots",
+    "obsessions_avoidances",
+    "external_perception",
+    "communication_patterns",
+    "relationship_dynamics",
+    "social_presentation",
+    "strength_amplification",
+    "warning_signs",
+    "actionable_practices",
+}
 
 
 @dataclass
@@ -36,7 +84,9 @@ class AnalysisConfig:
     date_range_end: Optional[datetime] = None
 
     # Sampling (when content exceeds context limits)
-    max_context_tokens: int = 180000  # Leave headroom from 200K limit
+    # Note: Token estimates are rough (~1.3x word count), so we need significant headroom
+    # Actual tokenization can be 20-30% higher than estimates
+    max_context_tokens: int = 140000  # Conservative limit to stay under 200K API limit
     sampling_strategy: str = "stratified_temporal"  # Only option currently
     sampling_prioritize: List[str] = field(
         default_factory=lambda: [
@@ -52,9 +102,19 @@ class AnalysisConfig:
     generate_synthesis: bool = True
 
     # Model settings
-    model: str = "claude-opus-4-5-20251101"
+    model: str = "claude-opus-4-5-20251101"  # Default/fallback model
     thinking_budget: int = 10000
     max_output_tokens: int = 16000
+
+    # Two-phase extraction (reduces token usage significantly)
+    use_extraction_phase: bool = True  # If True, extract once then analyze extraction
+    extraction_model: str = "claude-opus-4-5-20251101"  # Model for extraction phase
+    extraction_output_tokens: int = 25000  # Target extraction size
+
+    # Model tiers (use cheaper models for simpler analyses)
+    use_model_tiers: bool = True  # If True, use Sonnet for simpler dimensions
+    opus_dimensions: Optional[List[str]] = None  # Override DEFAULT_OPUS_DIMENSIONS
+    sonnet_dimensions: Optional[List[str]] = None  # Override DEFAULT_SONNET_DIMENSIONS
 
     # Output options
     include_evidence_links: bool = True
@@ -175,11 +235,30 @@ class AnalysisConfig:
             dirs["hubs"] = self.notes_root / "hubs"
         return dirs
 
+    def get_model_for_dimension(self, dimension: str) -> str:
+        """
+        Get the appropriate model for a given analysis dimension.
 
-# Pricing constants (as of 2026-01)
-CLAUDE_OPUS_INPUT_PRICE_PER_1M = 15.00  # USD per 1M input tokens
-CLAUDE_OPUS_OUTPUT_PRICE_PER_1M = 75.00  # USD per 1M output tokens
-CLAUDE_OPUS_CACHED_INPUT_PRICE_PER_1M = 1.50  # USD per 1M cached input tokens
+        Args:
+            dimension: The analysis dimension name
+
+        Returns:
+            Model identifier string
+        """
+        if not self.use_model_tiers:
+            return self.model
+
+        # Check custom overrides first
+        opus_dims = set(self.opus_dimensions) if self.opus_dimensions else DEFAULT_OPUS_DIMENSIONS
+        sonnet_dims = set(self.sonnet_dimensions) if self.sonnet_dimensions else DEFAULT_SONNET_DIMENSIONS
+
+        if dimension in opus_dims:
+            return MODEL_OPUS
+        elif dimension in sonnet_dims:
+            return MODEL_SONNET
+        else:
+            # Default to Opus for unknown dimensions
+            return MODEL_OPUS
 
 
 def estimate_cost(input_tokens: int, output_tokens: int, cache_hit_ratio: float = 0.0) -> tuple[float, float]:

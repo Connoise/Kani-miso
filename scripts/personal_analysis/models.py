@@ -224,6 +224,45 @@ class CollectedContent:
 
 
 @dataclass
+class Extraction:
+    """
+    Extracted key information from raw content.
+
+    This is the output of phase 1 (extraction) that gets passed to
+    all subsequent analysis phases instead of the full raw content.
+    This dramatically reduces token usage.
+    """
+
+    # The extracted content as structured text
+    content: str
+
+    # Metadata
+    extracted_at: datetime = field(default_factory=datetime.now)
+    model: str = ""
+    input_tokens: int = 0  # Tokens from raw content
+    output_tokens: int = 0  # Tokens in extraction
+
+    # Source statistics
+    source_notes: int = 0
+    source_reflections: int = 0
+    source_tweets: int = 0
+    source_images: int = 0
+    original_tokens: int = 0  # Original content token count
+
+    @property
+    def token_estimate(self) -> int:
+        """Estimate tokens in the extraction content."""
+        return int(len(self.content.split()) * 1.3)
+
+    @property
+    def compression_ratio(self) -> float:
+        """Calculate how much the content was compressed."""
+        if self.original_tokens == 0:
+            return 1.0
+        return self.token_estimate / self.original_tokens
+
+
+@dataclass
 class AnalysisResult:
     """Result from a single analysis dimension."""
 

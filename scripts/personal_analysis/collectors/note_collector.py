@@ -180,10 +180,17 @@ class NoteCollector:
             if field in frontmatter:
                 value = frontmatter[field]
                 if isinstance(value, datetime):
+                    # Normalize to naive datetime
+                    if value.tzinfo is not None:
+                        return value.replace(tzinfo=None)
                     return value
                 if isinstance(value, str):
                     try:
-                        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+                        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                        # Normalize to naive datetime
+                        if dt.tzinfo is not None:
+                            return dt.replace(tzinfo=None)
+                        return dt
                     except ValueError:
                         pass
 
