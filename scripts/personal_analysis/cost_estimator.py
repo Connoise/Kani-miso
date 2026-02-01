@@ -160,9 +160,19 @@ class CostEstimator:
     ) -> CostEstimate:
         """Estimate costs using two-phase extraction."""
 
-        # Phase 1: Extraction (1 call with full content)
-        extraction_input = effective_content_tokens + prompt_overhead
-        extraction_output = self.config.extraction_output_tokens
+        # Check if multipass extraction will be used
+        if self.config.use_multipass_extraction and requires_sampling:
+            # Multipass: estimate 2-3 extraction passes for full content
+            num_passes = max(1, (total_content_tokens // self.config.multipass_chunk_tokens) + 1)
+            extraction_input = total_content_tokens + (prompt_overhead * num_passes)
+            extraction_output = self.config.extraction_output_tokens * num_passes
+            # With multipass, we analyze all content
+            sampling_ratio = 1.0
+            requires_sampling = False
+        else:
+            # Single pass extraction
+            extraction_input = effective_content_tokens + prompt_overhead
+            extraction_output = self.config.extraction_output_tokens
 
         # Phase 2+: Analysis calls use extraction instead of full content
         # Extraction is typically 15-20% of original size

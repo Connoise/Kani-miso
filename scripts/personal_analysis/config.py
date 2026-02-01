@@ -86,7 +86,7 @@ class AnalysisConfig:
     # Sampling (when content exceeds context limits)
     # Note: Token estimates are rough (~1.3x word count), so we need significant headroom
     # Actual tokenization can be 20-30% higher than estimates
-    max_context_tokens: int = 140000  # Conservative limit to stay under 200K API limit
+    max_context_tokens: int = 150000  # Conservative limit to stay under 200K API limit
     sampling_strategy: str = "stratified_temporal"  # Only option currently
     sampling_prioritize: List[str] = field(
         default_factory=lambda: [
@@ -109,7 +109,12 @@ class AnalysisConfig:
     # Two-phase extraction (reduces token usage significantly)
     use_extraction_phase: bool = True  # If True, extract once then analyze extraction
     extraction_model: str = "claude-opus-4-5-20251101"  # Model for extraction phase
-    extraction_output_tokens: int = 25000  # Target extraction size
+    extraction_output_tokens: int = 25000  # Target extraction size per pass
+
+    # Multi-pass extraction (analyze 100% of content)
+    use_multipass_extraction: bool = True  # Split content into chunks, extract from each
+    # Note: Token estimates are ~40% lower than actual, so 110K estimated ≈ 155K actual
+    multipass_chunk_tokens: int = 110000  # Max estimated tokens per extraction pass
 
     # Model tiers (use cheaper models for simpler analyses)
     use_model_tiers: bool = True  # If True, use Sonnet for simpler dimensions
@@ -132,6 +137,10 @@ class AnalysisConfig:
 
     # Safety
     dry_run: bool = False  # Preview without writing or API calls
+
+    # Rate limiting
+    rate_limit_delay: int = 60  # Seconds to wait after extraction (for rate limit reset)
+    sequential_mode: bool = False  # Run analyses one at a time instead of parallel
 
     def __post_init__(self):
         """Validate and set defaults after initialization."""

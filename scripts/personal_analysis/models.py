@@ -178,6 +178,23 @@ class CollectedContent:
             return None, None
         return min(all_dates), max(all_dates)
 
+    def create_subset(
+        self,
+        include_notes: bool = False,
+        include_reflections: bool = False,
+        include_tweets: bool = False,
+        include_images: bool = False,
+    ) -> "CollectedContent":
+        """Create a subset of this content with only specified types."""
+        return CollectedContent(
+            notes=self.notes if include_notes else [],
+            reflections=self.reflections if include_reflections else [],
+            tweets=self.tweets if include_tweets else [],
+            images=self.images if include_images else [],
+            hubs=self.hubs,  # Always include hub metadata
+            collected_at=self.collected_at,
+        )
+
     def to_analysis_text(self, include_images: bool = False) -> str:
         """
         Convert all content to a single text for analysis.
@@ -260,6 +277,53 @@ class Extraction:
         if self.original_tokens == 0:
             return 1.0
         return self.token_estimate / self.original_tokens
+
+    @classmethod
+    def combine(cls, extractions: list["Extraction"]) -> "Extraction":
+        """Combine multiple extractions into one."""
+        if not extractions:
+            return cls(content="")
+
+        # Filter out failed extractions
+        valid = [e for e in extractions if e.content and not e.content.startswith("[Extraction failed")]
+
+        if not valid:
+            return cls(content="[All extractions failed]")
+
+        # Combine content with section headers
+        combined_parts = []
+        total_input = 0
+        total_output = 0
+        total_notes = 0
+        total_reflections = 0
+        total_tweets = 0
+        total_images = 0
+        total_original = 0
+
+        for i, ext in enumerate(valid, 1):
+            combined_parts.append(f"=== EXTRACTION PASS {i} ===\n")
+            combined_parts.append(ext.content)
+            combined_parts.append("\n\n")
+
+            total_input += ext.input_tokens
+            total_output += ext.output_tokens
+            total_notes += ext.source_notes
+            total_reflections += ext.source_reflections
+            total_tweets += ext.source_tweets
+            total_images += ext.source_images
+            total_original += ext.original_tokens
+
+        return cls(
+            content="\n".join(combined_parts).strip(),
+            model=valid[0].model if valid else "",
+            input_tokens=total_input,
+            output_tokens=total_output,
+            source_notes=total_notes,
+            source_reflections=total_reflections,
+            source_tweets=total_tweets,
+            source_images=total_images,
+            original_tokens=total_original,
+        )
 
 
 @dataclass

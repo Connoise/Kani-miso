@@ -133,12 +133,14 @@ class PersonalAnalyzer:
                 print("Analysis cancelled.")
                 return None
 
-        # Apply sampling if needed
-        if estimate.requires_sampling:
+        # Apply sampling if needed (skip if using multipass extraction - it handles its own chunking)
+        if estimate.requires_sampling and not self.config.use_multipass_extraction:
             print("\n[~] Sampling content (exceeds context limits)...")
             sampler = ContentSampler(self.config.max_context_tokens)
             result = sampler.sample_if_needed(self.content)
             self.content = result.content
+        elif estimate.requires_sampling and self.config.use_multipass_extraction:
+            print("\n[i] Content exceeds single-pass limit - will use multi-pass extraction")
 
         # Create output folder and save checkpoint
         output_folder.mkdir(parents=True, exist_ok=True)
@@ -146,13 +148,31 @@ class PersonalAnalyzer:
 
         # Phase 1.5: Extraction (if enabled)
         if self.config.use_extraction_phase:
-            print("\n[E] Extracting key information (phase 1)...")
+            if self.config.use_multipass_extraction:
+                print("\n[E] Multi-pass extraction (analyzing 100% of content)...")
+            else:
+                print("\n[E] Extracting key information (phase 1)...")
+
             self.extraction = self._run_extraction()
+
             if self.extraction:
                 compression = self.extraction.compression_ratio
-                print(f"  + Extraction complete ({compression:.0%} of original size)")
-                print(f"    Input: {self.extraction.input_tokens:,} tokens")
-                print(f"    Output: {self.extraction.output_tokens:,} tokens")
+                print(f"\n  [OK] Extraction complete ({compression:.0%} of original size)")
+                print(f"    Total input: {self.extraction.input_tokens:,} tokens")
+                print(f"    Total output: {self.extraction.output_tokens:,} tokens")
+
+                # Wait for rate limit to reset if configured (for non-multipass, since multipass handles its own delays)
+                if self.config.rate_limit_delay > 0 and not self.config.use_multipass_extraction:
+                    import time
+                    print(f"\n[.] Waiting {self.config.rate_limit_delay}s for rate limit reset...")
+                    time.sleep(self.config.rate_limit_delay)
+                    print("  + Ready to continue")
+                elif self.config.use_multipass_extraction and self.config.rate_limit_delay > 0:
+                    # Final wait after all extraction passes
+                    import time
+                    print(f"\n[.] Final wait {self.config.rate_limit_delay}s before analyses...")
+                    time.sleep(self.config.rate_limit_delay)
+                    print("  + Ready to continue")
 
         # Phase 2: Core Analysis
         print("\n[C] Running core analyses...")
@@ -254,9 +274,108 @@ class PersonalAnalyzer:
 
     def _run_extraction(self) -> Optional[Extraction]:
         """Run the extraction phase to compress content for subsequent analyses."""
+        if self.config.use_multipass_extraction:
+            return self._run_multipass_extraction()
+        else:
+            return self._run_single_extraction(self.content)
+
+    def _run_single_extraction(self, content: CollectedContent) -> Optional[Extraction]:
+        """Run extraction on a single content set."""
         extractor = ExtractionAnalyzer(self.config, self.client)
-        images = self.content.images if self.config.include_images else None
-        return extractor.extract(self.content, images)
+        images = content.images if self.config.include_images else None
+        return extractor.extract(content, images)
+
+    def _run_multipass_extraction(self) -> Optional[Extraction]:
+        """
+        Run multi-pass extraction to analyze 100% of content.
+
+        Splits content into chunks, extracts from each,
+        then combines the extractions.
+        """
+        import time
+
+        extractions = []
+        chunk_limit = self.config.multipass_chunk_tokens
+
+        # Calculate token counts for each content type
+        tweet_tokens = sum(t.token_estimate for t in self.content.tweets)
+        note_tokens = sum(n.token_estimate for n in self.content.notes)
+        reflection_tokens = sum(r.token_estimate for r in self.content.reflections)
+        total_tokens = tweet_tokens + note_tokens + reflection_tokens
+
+        print(f"    Content breakdown:")
+        print(f"      Tweets: {len(self.content.tweets):,} items (~{tweet_tokens:,} tokens)")
+        print(f"      Notes: {len(self.content.notes):,} files (~{note_tokens:,} tokens)")
+        print(f"      Reflections: {len(self.content.reflections):,} files (~{reflection_tokens:,} tokens)")
+        print(f"      Total: ~{total_tokens:,} tokens")
+
+        pass_num = 0
+
+        # Process tweets in chunks if needed
+        if tweet_tokens > 0:
+            tweets = list(self.content.tweets)
+            num_tweet_chunks = max(1, (tweet_tokens // chunk_limit) + 1)
+
+            if num_tweet_chunks > 1:
+                print(f"\n    Tweets require {num_tweet_chunks} passes (~{tweet_tokens:,} tokens)")
+
+            chunk_size = len(tweets) // num_tweet_chunks
+
+            for chunk_idx in range(num_tweet_chunks):
+                pass_num += 1
+                start_idx = chunk_idx * chunk_size
+                end_idx = start_idx + chunk_size if chunk_idx < num_tweet_chunks - 1 else len(tweets)
+                chunk_tweets = tweets[start_idx:end_idx]
+
+                print(f"\n    Pass {pass_num}: Extracting from tweets ({start_idx+1}-{end_idx} of {len(tweets)})...")
+
+                # Create a subset with just this chunk of tweets
+                chunk_content = CollectedContent(
+                    tweets=chunk_tweets,
+                    hubs=self.content.hubs,
+                )
+
+                extraction = self._run_single_extraction(chunk_content)
+                if extraction and extraction.output_tokens > 0:
+                    extractions.append(extraction)
+                    print(f"      + Extracted {extraction.output_tokens:,} tokens")
+
+                    # Wait for rate limit between passes
+                    if self.config.rate_limit_delay > 0:
+                        print(f"      Waiting {self.config.rate_limit_delay}s for rate limit...")
+                        time.sleep(self.config.rate_limit_delay)
+                else:
+                    print(f"      [!] Extraction failed for this chunk")
+
+        # Process notes + reflections
+        if note_tokens + reflection_tokens > 0:
+            pass_num += 1
+            print(f"\n    Pass {pass_num}: Extracting from notes and reflections...")
+            notes_content = self.content.create_subset(
+                include_notes=True,
+                include_reflections=True,
+                include_images=self.config.include_images,
+            )
+
+            extraction = self._run_single_extraction(notes_content)
+            if extraction and extraction.output_tokens > 0:
+                extractions.append(extraction)
+                print(f"      + Extracted {extraction.output_tokens:,} tokens from notes")
+
+        # Combine extractions
+        if not extractions:
+            print("    [!] No extractions succeeded")
+            return None
+
+        if len(extractions) == 1:
+            return extractions[0]
+
+        print(f"\n    Combining {len(extractions)} extractions...")
+        combined = Extraction.combine(extractions)
+        print(f"    + Combined extraction: {combined.token_estimate:,} tokens")
+        print(f"    + Total content covered: 100%")
+
+        return combined
 
     def _run_core_analysis(self) -> Dict[str, AnalysisResult]:
         """Run core analysis dimensions in parallel."""
@@ -674,6 +793,22 @@ def main():
         action="store_true",
         help="Use Sonnet for all analyses (cheaper but less nuanced)",
     )
+    parser.add_argument(
+        "--rate-limit-delay",
+        type=int,
+        default=60,
+        help="Seconds to wait after extraction for rate limit reset (default: 60)",
+    )
+    parser.add_argument(
+        "--no-delay",
+        action="store_true",
+        help="Skip rate limit delay after extraction",
+    )
+    parser.add_argument(
+        "--no-multipass",
+        action="store_true",
+        help="Disable multi-pass extraction (use single-pass with sampling)",
+    )
 
     args = parser.parse_args()
 
@@ -695,6 +830,16 @@ def main():
         from .config import MODEL_SONNET
         config.model = MODEL_SONNET
         config.extraction_model = MODEL_SONNET
+
+    # Handle rate limit delay
+    if args.no_delay:
+        config.rate_limit_delay = 0
+    else:
+        config.rate_limit_delay = args.rate_limit_delay
+
+    # Handle multipass extraction
+    if args.no_multipass:
+        config.use_multipass_extraction = False
 
     if args.dimensions:
         config.dimensions = args.dimensions.split(",")
