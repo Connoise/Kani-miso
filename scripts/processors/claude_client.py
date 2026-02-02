@@ -358,6 +358,139 @@ When processing captures with images:
 
         return "\n".join(lines)
 
+    def process_source_capture(
+        self,
+        capture: Dict[str, Any],
+        web_content: Dict[str, Any],
+        specs_dir: Path,
+    ) -> str:
+        """
+        Process a source capture (webpage/article) into structured markdown.
+
+        Args:
+            capture: Capture dictionary from queue (includes user context)
+            web_content: Dictionary from WebFetcher with:
+                - url: original URL
+                - metadata: extracted metadata (title, author, date, etc.)
+                - markdown_content: converted webpage content
+            specs_dir: Path to specs directory
+
+        Returns:
+            Processed markdown content
+        """
+        # Load the source processing prompt
+        source_prompt_path = specs_dir / "source-processing-prompt.md"
+        system_prompt = self.load_prompt_template(source_prompt_path)
+
+        # Build the user message with source data
+        user_message = self._build_source_user_message(capture, web_content)
+
+        # Call Claude API
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": user_message}
+            ]
+        )
+
+        # Extract the text content
+        markdown_content = response.content[0].text
+
+        logger.info(
+            f"Processed source capture {capture['id']} "
+            f"(tokens: {response.usage.input_tokens} in, {response.usage.output_tokens} out)"
+        )
+
+        return markdown_content
+
+    def _build_source_user_message(
+        self,
+        capture: Dict[str, Any],
+        web_content: Dict[str, Any],
+    ) -> str:
+        """
+        Build the user message for source capture processing.
+
+        Args:
+            capture: Capture dictionary
+            web_content: Web content dictionary from WebFetcher
+
+        Returns:
+            Formatted user message
+        """
+        metadata = web_content.get('metadata', {})
+
+        lines = [
+            "Process the following webpage source for the archive.",
+            "Use source-processing-prompt.md to format the output.",
+            "Output markdown only.",
+            "",
+            "## Source URL",
+            web_content.get('url', 'Unknown'),
+            "",
+            "## Extracted Metadata",
+            f"- Title: {metadata.get('title', 'Unknown')}",
+            f"- Author: {metadata.get('author', 'Unknown')}",
+            f"- Published Date: {metadata.get('date', 'Unknown')}",
+            f"- Site Name: {metadata.get('site_name', metadata.get('domain', 'Unknown'))}",
+            f"- Description: {metadata.get('description', 'N/A')}",
+            "",
+            f"## Captured At",
+            capture.get('captured_at', 'Unknown'),
+            "",
+        ]
+
+        # Add user context if provided
+        user_body = capture.get('body', '').strip()
+        # Extract URL from body if present (user might have included just URL or URL + context)
+        # We want to capture any additional context the user provided beyond just the URL
+        url = web_content.get('url', '')
+        user_context = user_body.replace(url, '').strip()
+
+        if user_context:
+            lines.extend([
+                "## User Context (Why This Was Captured)",
+                user_context,
+                "",
+            ])
+        else:
+            lines.extend([
+                "## User Context (Why This Was Captured)",
+                "No context provided by user.",
+                "",
+            ])
+
+        # Add the converted webpage content
+        markdown_content = web_content.get('markdown_content', '')
+        if markdown_content:
+            # Limit content length for API (keep under ~100k chars)
+            max_content_length = 80000
+            if len(markdown_content) > max_content_length:
+                truncated = markdown_content[:max_content_length]
+                lines.extend([
+                    "## Webpage Content (Converted to Markdown)",
+                    "Note: Content was truncated due to length.",
+                    "",
+                    truncated,
+                    "",
+                    "[Content truncated - original was significantly longer]",
+                ])
+            else:
+                lines.extend([
+                    "## Webpage Content (Converted to Markdown)",
+                    markdown_content,
+                ])
+        else:
+            lines.extend([
+                "## Webpage Content",
+                "Content could not be extracted from the webpage.",
+            ])
+
+        return "\n".join(lines)
+
     def test_connection(self) -> bool:
         """
         Test the API connection with a simple request.

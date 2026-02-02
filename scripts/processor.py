@@ -8,6 +8,7 @@ import sys
 import json
 from pathlib import Path
 from collections import defaultdict
+from typing import Dict, Any
 import yaml
 from dotenv import load_dotenv
 
@@ -18,6 +19,7 @@ from queue_manager import QueueManager
 from processors.claude_client import ClaudeClient
 from processors.file_writer import FileWriter
 from processors.git_manager import GitManager
+from processors.web_fetcher import WebFetcher
 from utils.logger import setup_logger
 
 # Load environment variables
@@ -108,6 +110,9 @@ class Processor:
         else:
             self.git = None
 
+        # Web fetcher for source captures
+        self.web_fetcher = WebFetcher()
+
         logger.info("All components initialized")
         if self.notes_root != self.repo_root:
             logger.info(f"Notes storage: {self.notes_root}")
@@ -155,7 +160,7 @@ class Processor:
                     except (json.JSONDecodeError, TypeError):
                         image_paths = []
 
-                # Process with Claude (with or without images)
+                # Process with Claude based on capture type
                 if image_paths:
                     logger.info(f"Processing capture {capture['id']} ({capture['type']}) with {len(image_paths)} images")
                     markdown = self.claude.process_capture_with_images(
@@ -164,6 +169,9 @@ class Processor:
                         specs_dir,
                         self.notes_root,
                     )
+                elif capture['type'] == 'Source':
+                    # Source captures - check for URL and fetch webpage
+                    markdown = self._process_source_capture(capture, specs_dir)
                 else:
                     logger.info(f"Processing capture {capture['id']} ({capture['type']})")
                     markdown = self.claude.process_telegram_capture(capture, specs_dir)
@@ -215,6 +223,61 @@ class Processor:
         logger.info("=" * 60)
 
         return summary
+
+    def _process_source_capture(self, capture: Dict[str, Any], specs_dir: Path) -> str:
+        """
+        Process a source capture, fetching webpage content if URL is present.
+
+        Args:
+            capture: Capture dictionary from queue
+            specs_dir: Path to specs directory
+
+        Returns:
+            Processed markdown content
+        """
+        body = capture.get('body', '')
+
+        # Try to extract URL from the capture body
+        url = self.web_fetcher.extract_url_from_text(body)
+
+        if url:
+            logger.info(f"Processing source capture {capture['id']} with URL: {url}")
+
+            # Fetch and convert the webpage
+            web_content = self.web_fetcher.fetch_and_convert(url)
+
+            if web_content['success']:
+                logger.info(f"Successfully fetched webpage: {web_content['metadata'].get('title', 'Unknown')}")
+                # Process with source-specific prompt
+                return self.claude.process_source_capture(capture, web_content, specs_dir)
+            else:
+                # Webpage fetch failed - log error and fall back to basic processing
+                logger.warning(f"Failed to fetch webpage: {web_content['error']}")
+                logger.info("Falling back to basic source processing without webpage content")
+
+                # Create minimal web_content for processing
+                web_content = {
+                    'success': False,
+                    'url': url,
+                    'metadata': {'title': 'Unknown', 'domain': url},
+                    'markdown_content': f"[Webpage content could not be fetched: {web_content['error']}]",
+                    'error': web_content['error'],
+                }
+                return self.claude.process_source_capture(capture, web_content, specs_dir)
+        else:
+            # No URL found - process as regular source without web content
+            logger.info(f"Processing source capture {capture['id']} (no URL detected)")
+
+            # Create a minimal web_content structure for non-URL sources
+            web_content = {
+                'success': False,
+                'url': '',
+                'metadata': {},
+                'markdown_content': '',
+                'error': 'No URL provided',
+            }
+            # Fall back to telegram processing for non-URL sources
+            return self.claude.process_telegram_capture(capture, specs_dir)
 
     def show_stats(self):
         """Display queue statistics."""
