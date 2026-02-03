@@ -32,21 +32,30 @@ The function reads existing analysis markdown files (from `/analysis/YYYY-MM/`) 
 
 ### 2.1 Condensed Documents (Target: 3-8 files)
 
-Output location: `/notes/person-profile/` (within Obsidian vault)
+Output location: `/notes/person-profile/YYYY-MM/` (within Obsidian vault, timestamped folders)
 
 ```
 /notes/person-profile/
-├── 00-personal-background.md      # Factual biographical information
-├── 01-psychological-summary.md    # Core psychological patterns
-├── 02-emotional-profile.md        # Emotional landscape and regulation
-├── 03-cognitive-intellectual.md   # Thinking patterns, interests, learning
-├── 04-values-ethics-meaning.md    # Values, ethics, spiritual/existential
-├── 05-relational-social.md        # Relationships, communication, social patterns
-├── 06-challenges-growth.md        # Current struggles, growth areas, warnings
-├── 07-key-themes-tensions.md      # Central threads, contradictions, essence
-└── _meta/
-    └── condensation-manifest.yaml # What was condensed, when, from what source
+├── 2026-02/                                    # Monthly folder
+│   ├── 00-personal-background--2026-02-03.md   # Timestamped files
+│   ├── 01-psychological-summary--2026-02-03.md
+│   ├── 02-emotional-profile--2026-02-03.md
+│   ├── 03-cognitive-intellectual--2026-02-03.md
+│   ├── 04-values-ethics-meaning--2026-02-03.md
+│   ├── 05-relational-social--2026-02-03.md
+│   ├── 06-challenges-growth--2026-02-03.md
+│   ├── 07-key-themes-tensions--2026-02-03.md
+│   └── _meta/
+│       └── condensation-manifest.yaml
+├── 2026-08/                                    # Later condensation
+│   └── ...                                     # Same structure
+└── latest -> 2026-08/                          # Symlink to most recent
 ```
+
+This structure:
+- Preserves historical versions of the profile
+- Groups related files by generation date
+- Allows comparison of how the profile evolves over time
 
 ### 2.2 Personal Background Document Structure
 
@@ -835,26 +844,37 @@ Based on clinical relevance for health, growth, and future planning:
 
 The following decisions have been made:
 
+### 8.1 Content & Data Handling
+
 | Question | Decision | Rationale |
 |----------|----------|-----------|
 | **Sensitive Information** | Preserve everything | Clinical accuracy requires full context |
 | **Evidence Linking** | Include wikilinks | Traceability within Obsidian vault |
 | **Multiple Analyses** | Use most recent only | Simplicity; historical versions preserved separately |
 | **Missing Information** | Show "Not provided" | Transparency about data gaps |
-| **Update Workflow** | Full re-verification each time | Ensures accuracy, user maintains control |
 | **Output Length** | No limit | Completeness over brevity |
 | **Export Formats** | Markdown only | Sufficient for intended use cases |
-| **File Naming** | Timestamped versions | Preserves history of profile evolution |
+| **Partial Analyses** | Generate what's possible with warnings | Partial output better than none |
+| **Confidence Aggregation** | Report range, note lowest prominently | Transparency about certainty |
 
-### 8.1 Remaining Implementation Questions
+### 8.2 User Interaction
 
-These questions may arise during development:
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| **Verification Method** | Interactive CLI | Direct, immediate feedback loop |
+| **Update Workflow** | Full re-verification each time | Ensures accuracy, user maintains control |
+| **Pre-population** | Extract/guess from notes first | Reduces manual input, leverages existing data |
+| **Standalone Mode** | Yes, allow without full analysis | Background useful independently |
 
-1. **Partial Analyses**: What if the source analysis is incomplete (some dimensions failed)?
-   - Decision: Generate what's possible with clear warnings
+### 8.3 Output Structure
 
-2. **Confidence Aggregation**: How to handle varying confidence across source documents?
-   - Decision: Report the range and note lowest confidence prominently
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| **File Naming** | Folder per month + timestamp in filename | e.g., `/person-profile/2026-02/00-background--2026-02-03.md` |
+| **Hub Integration** | Link to existing hubs where relevant | Integrates with knowledge graph |
+| **Tone** | Clinical third-person | Professional audience readability |
+| **Visual Analysis** | Integrate into relevant categories | Holistic view per category |
+| **Contradictions** | Show where relevant in each category | Context-appropriate visibility |
 
 ---
 
