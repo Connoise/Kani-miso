@@ -831,71 +831,30 @@ Based on clinical relevance for health, growth, and future planning:
 
 ---
 
-## 8. Questions for Development
+## 8. Design Decisions (Resolved)
 
-Before implementing, these questions should be clarified:
+The following decisions have been made:
 
-### 8.1 Scope Questions
+| Question | Decision | Rationale |
+|----------|----------|-----------|
+| **Sensitive Information** | Preserve everything | Clinical accuracy requires full context |
+| **Evidence Linking** | Include wikilinks | Traceability within Obsidian vault |
+| **Multiple Analyses** | Use most recent only | Simplicity; historical versions preserved separately |
+| **Missing Information** | Show "Not provided" | Transparency about data gaps |
+| **Update Workflow** | Full re-verification each time | Ensures accuracy, user maintains control |
+| **Output Length** | No limit | Completeness over brevity |
+| **Export Formats** | Markdown only | Sufficient for intended use cases |
+| **File Naming** | Timestamped versions | Preserves history of profile evolution |
 
-1. **Analysis Recency**: Should condensation always use the most recent analysis, or allow selection?
-   - Default to latest, but `--analysis` flag allows specifying
+### 8.1 Remaining Implementation Questions
 
-2. **Multiple Analyses**: If multiple analysis runs exist, should they be:
-   - Condensed independently?
-   - Merged into a longitudinal view?
-   - User's choice?
+These questions may arise during development:
 
-3. **Partial Analyses**: What if the source analysis is incomplete (some dimensions failed)?
-   - Generate what's possible with clear warnings
-   - Skip affected categories
+1. **Partial Analyses**: What if the source analysis is incomplete (some dimensions failed)?
+   - Decision: Generate what's possible with clear warnings
 
-### 8.2 Content Questions
-
-4. **Sensitive Information**: Should there be a mode that redacts highly sensitive information?
-   - Names of other people?
-   - Specific trauma details?
-   - Or always preserve everything for clinical accuracy?
-
-5. **Evidence Linking**: Should wikilinks to original notes be preserved in condensed output?
-   - Pros: Traceability, deeper exploration possible
-   - Cons: Breaks if shared outside Obsidian
-
-6. **Confidence Aggregation**: How to handle varying confidence across source documents?
-   - Weighted average?
-   - Lowest confidence?
-   - Report range?
-
-### 8.3 User Interaction Questions
-
-7. **Verification Depth**: How thorough should background verification be?
-   - Every field individually?
-   - Section summaries?
-   - Just review final document?
-
-8. **Missing Information Handling**: What to do with fields user can't/won't provide?
-   - Mark as "Not provided"?
-   - Omit entirely?
-   - Note "Declined to share"?
-
-9. **Update Workflow**: How to handle updates to background over time?
-   - Full re-verification?
-   - Diff-based updates?
-   - Always append, never delete?
-
-### 8.4 Output Questions
-
-10. **File Naming**: Should output files be timestamped or static?
-    - Static: Easier to find, overwritten on regeneration
-    - Timestamped: Historical versions preserved
-
-11. **Format Variants**: Should alternative export formats be supported?
-    - Plain text (for sharing)
-    - PDF (for professionals)
-    - Structured data (for LLM consumption)
-
-12. **Summary Length**: What's the target total word count across all documents?
-    - 5,000-8,000 words suggested (readable in 20-30 minutes)
-    - Configurable via CLI?
+2. **Confidence Aggregation**: How to handle varying confidence across source documents?
+   - Decision: Report the range and note lowest confidence prominently
 
 ---
 
