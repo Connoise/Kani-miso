@@ -28,6 +28,10 @@ colorama==0.4.6
 PyPDF2==3.0.1
 pypdf==4.0.1
 
+# Web fetching and HTML processing (for webpage sources)
+beautifulsoup4==4.12.3
+html2text==2024.2.26
+
 # Optional: Better markdown parsing
 markdown==3.5.2
 

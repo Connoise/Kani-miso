@@ -358,6 +358,280 @@ When processing captures with images:
 
         return "\n".join(lines)
 
+    def process_source_capture(
+        self,
+        capture: Dict[str, Any],
+        web_content: Dict[str, Any],
+        specs_dir: Path,
+    ) -> str:
+        """
+        Process a source capture (webpage/article) into structured markdown.
+
+        Args:
+            capture: Capture dictionary from queue (includes user context)
+            web_content: Dictionary from WebFetcher with:
+                - url: original URL
+                - metadata: extracted metadata (title, author, date, etc.)
+                - markdown_content: converted webpage content
+            specs_dir: Path to specs directory
+
+        Returns:
+            Processed markdown content
+        """
+        # Load the source processing prompt
+        source_prompt_path = specs_dir / "source-processing-prompt.md"
+        system_prompt = self.load_prompt_template(source_prompt_path)
+
+        # Build the user message with source data
+        user_message = self._build_source_user_message(capture, web_content)
+
+        # Call Claude API
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": user_message}
+            ]
+        )
+
+        # Extract the text content
+        markdown_content = response.content[0].text
+
+        logger.info(
+            f"Processed source capture {capture['id']} "
+            f"(tokens: {response.usage.input_tokens} in, {response.usage.output_tokens} out)"
+        )
+
+        return markdown_content
+
+    def _build_source_user_message(
+        self,
+        capture: Dict[str, Any],
+        web_content: Dict[str, Any],
+    ) -> str:
+        """
+        Build the user message for source capture processing.
+
+        Args:
+            capture: Capture dictionary
+            web_content: Web content dictionary from WebFetcher
+
+        Returns:
+            Formatted user message
+        """
+        metadata = web_content.get('metadata', {})
+
+        lines = [
+            "Process the following webpage source for the archive.",
+            "Use source-processing-prompt.md to format the output.",
+            "Output markdown only.",
+            "",
+            "## Source URL",
+            web_content.get('url', 'Unknown'),
+            "",
+            "## Extracted Metadata",
+            f"- Title: {metadata.get('title', 'Unknown')}",
+            f"- Author: {metadata.get('author', 'Unknown')}",
+            f"- Published Date: {metadata.get('date', 'Unknown')}",
+            f"- Site Name: {metadata.get('site_name', metadata.get('domain', 'Unknown'))}",
+            f"- Description: {metadata.get('description', 'N/A')}",
+            "",
+            f"## Captured At",
+            capture.get('captured_at', 'Unknown'),
+            "",
+        ]
+
+        # Add user context if provided
+        user_body = capture.get('body', '').strip()
+        # Extract URL from body if present (user might have included just URL or URL + context)
+        # We want to capture any additional context the user provided beyond just the URL
+        url = web_content.get('url', '')
+        user_context = user_body.replace(url, '').strip()
+
+        if user_context:
+            lines.extend([
+                "## User Context (Why This Was Captured)",
+                user_context,
+                "",
+            ])
+        else:
+            lines.extend([
+                "## User Context (Why This Was Captured)",
+                "No context provided by user.",
+                "",
+            ])
+
+        # Add the converted webpage content
+        markdown_content = web_content.get('markdown_content', '')
+        if markdown_content:
+            # Limit content length for API (keep under ~100k chars)
+            max_content_length = 80000
+            if len(markdown_content) > max_content_length:
+                truncated = markdown_content[:max_content_length]
+                lines.extend([
+                    "## Webpage Content (Converted to Markdown)",
+                    "Note: Content was truncated due to length.",
+                    "",
+                    truncated,
+                    "",
+                    "[Content truncated - original was significantly longer]",
+                ])
+            else:
+                lines.extend([
+                    "## Webpage Content (Converted to Markdown)",
+                    markdown_content,
+                ])
+        else:
+            lines.extend([
+                "## Webpage Content",
+                "Content could not be extracted from the webpage.",
+            ])
+
+        return "\n".join(lines)
+
+    def process_pdf_capture(
+        self,
+        capture: Dict[str, Any],
+        pdf_content: Dict[str, Any],
+        specs_dir: Path,
+    ) -> str:
+        """
+        Process a PDF capture into structured markdown.
+
+        Args:
+            capture: Capture dictionary from queue (includes user context)
+            pdf_content: Dictionary from PDFProcessor with:
+                - text: extracted text content
+                - metadata: PDF metadata (title, author, etc.)
+                - page_count: total pages
+                - pages_processed: pages actually processed
+                - file_path: path to PDF file
+                - file_name: PDF filename
+            specs_dir: Path to specs directory
+
+        Returns:
+            Processed markdown content
+        """
+        # Load the PDF processing prompt
+        pdf_prompt_path = specs_dir / "pdf-processing-prompt.md"
+        system_prompt = self.load_prompt_template(pdf_prompt_path)
+
+        # Build the user message with PDF data
+        user_message = self._build_pdf_user_message(capture, pdf_content)
+
+        # Call Claude API
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": user_message}
+            ]
+        )
+
+        # Extract the text content
+        markdown_content = response.content[0].text
+
+        logger.info(
+            f"Processed PDF capture {capture['id']} "
+            f"(tokens: {response.usage.input_tokens} in, {response.usage.output_tokens} out)"
+        )
+
+        return markdown_content
+
+    def _build_pdf_user_message(
+        self,
+        capture: Dict[str, Any],
+        pdf_content: Dict[str, Any],
+    ) -> str:
+        """
+        Build the user message for PDF capture processing.
+
+        Args:
+            capture: Capture dictionary
+            pdf_content: PDF content dictionary from PDFProcessor
+
+        Returns:
+            Formatted user message
+        """
+        metadata = pdf_content.get('metadata', {})
+
+        lines = [
+            "Process the following PDF document for the archive.",
+            "Use pdf-processing-prompt.md to format the output.",
+            "Output markdown only.",
+            "",
+            "## PDF Information",
+            f"- File Name: {pdf_content.get('file_name', 'Unknown')}",
+            f"- File Path: {pdf_content.get('file_path', 'Unknown')}",
+            f"- Page Count: {pdf_content.get('page_count', 'Unknown')}",
+            f"- Pages Processed: {pdf_content.get('pages_processed', 'Unknown')}",
+            "",
+            "## PDF Metadata",
+            f"- Title: {metadata.get('title', 'Unknown')}",
+            f"- Author: {metadata.get('author', 'Unknown')}",
+            f"- Subject: {metadata.get('subject', 'Unknown')}",
+            f"- Creator: {metadata.get('creator', 'Unknown')}",
+            f"- Creation Date: {metadata.get('creation_date', 'Unknown')}",
+            "",
+            "## Captured At",
+            capture.get('captured_at', 'Unknown'),
+            "",
+        ]
+
+        # Add user context if provided
+        user_body = capture.get('body', '').strip()
+        # Remove "PDF: filename" if that's all there is
+        file_name = pdf_content.get('file_name', '')
+        if user_body.startswith(f"PDF: {file_name}"):
+            user_context = user_body[len(f"PDF: {file_name}"):].strip()
+        else:
+            user_context = user_body
+
+        if user_context:
+            lines.extend([
+                "## User Context (Why This Was Captured)",
+                user_context,
+                "",
+            ])
+        else:
+            lines.extend([
+                "## User Context (Why This Was Captured)",
+                "No context provided by user.",
+                "",
+            ])
+
+        # Add the extracted PDF text
+        pdf_text = pdf_content.get('text', '')
+        if pdf_text:
+            # Limit content length for API (keep under ~100k chars)
+            max_content_length = 80000
+            if len(pdf_text) > max_content_length:
+                truncated = pdf_text[:max_content_length]
+                lines.extend([
+                    "## Extracted PDF Text",
+                    "Note: Content was truncated due to length.",
+                    "",
+                    truncated,
+                    "",
+                    "[Content truncated - original was significantly longer]",
+                ])
+            else:
+                lines.extend([
+                    "## Extracted PDF Text",
+                    pdf_text,
+                ])
+        else:
+            lines.extend([
+                "## Extracted PDF Text",
+                "Text could not be extracted from the PDF.",
+            ])
+
+        return "\n".join(lines)
+
     def test_connection(self) -> bool:
         """
         Test the API connection with a simple request.

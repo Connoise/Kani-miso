@@ -80,13 +80,18 @@ class QueueManager:
 
     def _run_migrations(self, conn):
         """Run database migrations to add new columns to existing tables."""
-        # Check if image_paths column exists in captures table
+        # Check existing columns in captures table
         cursor = conn.execute("PRAGMA table_info(captures)")
         columns = [row[1] for row in cursor.fetchall()]
 
         if 'image_paths' not in columns:
             logger.info("Migrating database: adding image_paths column to captures table")
             conn.execute("ALTER TABLE captures ADD COLUMN image_paths TEXT")
+            conn.commit()
+
+        if 'document_paths' not in columns:
+            logger.info("Migrating database: adding document_paths column to captures table")
+            conn.execute("ALTER TABLE captures ADD COLUMN document_paths TEXT")
             conn.commit()
 
     @contextmanager
@@ -449,3 +454,27 @@ class QueueManager:
             )
             conn.commit()
         logger.debug(f"Updated capture {capture_id} with {len(image_paths)} image paths")
+
+    def update_capture_document_paths(
+        self,
+        capture_id: int,
+        document_paths: List[str],
+    ) -> None:
+        """
+        Update the document_paths field for a capture.
+
+        Args:
+            capture_id: Capture ID
+            document_paths: List of document file paths
+        """
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE captures
+                SET document_paths = ?
+                WHERE id = ?
+                """,
+                (json.dumps(document_paths), capture_id),
+            )
+            conn.commit()
+        logger.debug(f"Updated capture {capture_id} with {len(document_paths)} document paths")

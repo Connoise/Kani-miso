@@ -8,6 +8,7 @@ import sys
 import json
 from pathlib import Path
 from collections import defaultdict
+from typing import Dict, Any, List
 import yaml
 from dotenv import load_dotenv
 
@@ -18,6 +19,8 @@ from queue_manager import QueueManager
 from processors.claude_client import ClaudeClient
 from processors.file_writer import FileWriter
 from processors.git_manager import GitManager
+from processors.web_fetcher import WebFetcher
+from processors.pdf_processor import PDFProcessor
 from utils.logger import setup_logger
 
 # Load environment variables
@@ -108,6 +111,12 @@ class Processor:
         else:
             self.git = None
 
+        # Web fetcher for source captures
+        self.web_fetcher = WebFetcher()
+
+        # PDF processor for document captures
+        self.pdf_processor = PDFProcessor()
+
         logger.info("All components initialized")
         if self.notes_root != self.repo_root:
             logger.info(f"Notes storage: {self.notes_root}")
@@ -147,6 +156,14 @@ class Processor:
                 # Mark as processing
                 self.queue.mark_processing(capture['id'])
 
+                # Check if capture has documents (PDFs)
+                document_paths = []
+                if capture.get('document_paths'):
+                    try:
+                        document_paths = json.loads(capture['document_paths'])
+                    except (json.JSONDecodeError, TypeError):
+                        document_paths = []
+
                 # Check if capture has images
                 image_paths = []
                 if capture.get('image_paths'):
@@ -155,8 +172,11 @@ class Processor:
                     except (json.JSONDecodeError, TypeError):
                         image_paths = []
 
-                # Process with Claude (with or without images)
-                if image_paths:
+                # Process with Claude based on capture type
+                if document_paths:
+                    # Document captures (PDFs) - extract text and process
+                    markdown = self._process_document_capture(capture, document_paths, specs_dir)
+                elif image_paths:
                     logger.info(f"Processing capture {capture['id']} ({capture['type']}) with {len(image_paths)} images")
                     markdown = self.claude.process_capture_with_images(
                         capture,
@@ -164,6 +184,9 @@ class Processor:
                         specs_dir,
                         self.notes_root,
                     )
+                elif capture['type'] == 'Source':
+                    # Source captures - check for URL and fetch webpage
+                    markdown = self._process_source_capture(capture, specs_dir)
                 else:
                     logger.info(f"Processing capture {capture['id']} ({capture['type']})")
                     markdown = self.claude.process_telegram_capture(capture, specs_dir)
@@ -215,6 +238,120 @@ class Processor:
         logger.info("=" * 60)
 
         return summary
+
+    def _process_source_capture(self, capture: Dict[str, Any], specs_dir: Path) -> str:
+        """
+        Process a source capture, fetching webpage content if URL is present.
+
+        Args:
+            capture: Capture dictionary from queue
+            specs_dir: Path to specs directory
+
+        Returns:
+            Processed markdown content
+        """
+        body = capture.get('body', '')
+
+        # Try to extract URL from the capture body
+        url = self.web_fetcher.extract_url_from_text(body)
+
+        if url:
+            logger.info(f"Processing source capture {capture['id']} with URL: {url}")
+
+            # Fetch and convert the webpage
+            web_content = self.web_fetcher.fetch_and_convert(url)
+
+            if web_content['success']:
+                logger.info(f"Successfully fetched webpage: {web_content['metadata'].get('title', 'Unknown')}")
+                # Process with source-specific prompt
+                return self.claude.process_source_capture(capture, web_content, specs_dir)
+            else:
+                # Webpage fetch failed - log error and fall back to basic processing
+                logger.warning(f"Failed to fetch webpage: {web_content['error']}")
+                logger.info("Falling back to basic source processing without webpage content")
+
+                # Create minimal web_content for processing
+                web_content = {
+                    'success': False,
+                    'url': url,
+                    'metadata': {'title': 'Unknown', 'domain': url},
+                    'markdown_content': f"[Webpage content could not be fetched: {web_content['error']}]",
+                    'error': web_content['error'],
+                }
+                return self.claude.process_source_capture(capture, web_content, specs_dir)
+        else:
+            # No URL found - process as regular source without web content
+            logger.info(f"Processing source capture {capture['id']} (no URL detected)")
+
+            # Create a minimal web_content structure for non-URL sources
+            web_content = {
+                'success': False,
+                'url': '',
+                'metadata': {},
+                'markdown_content': '',
+                'error': 'No URL provided',
+            }
+            # Fall back to telegram processing for non-URL sources
+            return self.claude.process_telegram_capture(capture, specs_dir)
+
+    def _process_document_capture(
+        self,
+        capture: Dict[str, Any],
+        document_paths: List[str],
+        specs_dir: Path,
+    ) -> str:
+        """
+        Process a document capture (PDF), extracting text and processing with Claude.
+
+        Args:
+            capture: Capture dictionary from queue
+            document_paths: List of document file paths
+            specs_dir: Path to specs directory
+
+        Returns:
+            Processed markdown content
+        """
+        # Currently we only process the first document
+        # (future: could combine multiple PDFs)
+        if not document_paths:
+            logger.warning(f"No document paths found for capture {capture['id']}")
+            return self.claude.process_telegram_capture(capture, specs_dir)
+
+        doc_path = Path(document_paths[0])
+        logger.info(f"Processing document capture {capture['id']}: {doc_path.name}")
+
+        # Check if it's a PDF
+        if doc_path.suffix.lower() != '.pdf':
+            logger.warning(f"Non-PDF document: {doc_path.suffix}. Falling back to text processing.")
+            return self.claude.process_telegram_capture(capture, specs_dir)
+
+        # Extract text from PDF
+        pdf_content = self.pdf_processor.extract_text(doc_path)
+
+        if pdf_content['success']:
+            logger.info(
+                f"Successfully extracted text from PDF: {pdf_content['page_count']} pages, "
+                f"{len(pdf_content['text'])} characters"
+            )
+            # Process with PDF-specific prompt
+            return self.claude.process_pdf_capture(capture, pdf_content, specs_dir)
+        else:
+            # PDF extraction failed - log error and try basic processing
+            logger.warning(f"Failed to extract PDF text: {pdf_content['error']}")
+            logger.info("Falling back to basic processing without PDF content")
+
+            # Create minimal pdf_content for processing
+            pdf_content = {
+                'success': False,
+                'text': f"[PDF text could not be extracted: {pdf_content['error']}]",
+                'metadata': {},
+                'page_count': 0,
+                'pages_processed': 0,
+                'file_path': str(doc_path),
+                'file_name': doc_path.name,
+                'error': pdf_content['error'],
+            }
+            return self.claude.process_pdf_capture(capture, pdf_content, specs_dir)
 
     def show_stats(self):
         """Display queue statistics."""
