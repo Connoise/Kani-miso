@@ -326,6 +326,9 @@ class TelegramBot:
             document = message.get('document', {})
             caption = message.get('caption', '')
 
+            logger.info(f"handle_document called - file_name: {document.get('file_name')}, "
+                       f"mime_type: {document.get('mime_type')}, size: {document.get('file_size')}")
+
             if not chat_id or not document:
                 return
 
@@ -345,7 +348,10 @@ class TelegramBot:
             file_size = document.get('file_size', 0)
 
             # Check if it's a processable document type
-            if not self.document_manager.is_processable(file_name):
+            is_processable = self.document_manager.is_processable(file_name)
+            logger.info(f"Document '{file_name}' processable: {is_processable}")
+
+            if not is_processable:
                 self.send_message(
                     chat_id,
                     f"⚠️ Document type not supported for processing: {file_name}\n"
@@ -363,6 +369,7 @@ class TelegramBot:
                 return
 
             # Download and save the document
+            logger.info(f"Downloading document: file_id={file_id}")
             captured_at = datetime.now()
             local_path, error = self.document_manager.download_telegram_document(
                 file_id=file_id,
@@ -372,8 +379,11 @@ class TelegramBot:
             )
 
             if error:
+                logger.error(f"Document download failed: {error}")
                 self.send_message(chat_id, f"❌ Failed to save document: {error}")
                 return
+
+            logger.info(f"Document downloaded to: {local_path}")
 
             # Parse caption if present (for context)
             parsed = self.parse_message(caption) if caption else {'body': '', 'type': 'Source'}
@@ -465,18 +475,32 @@ class TelegramBot:
         return capture_id
 
     def handle_message(self, update: Dict[str, Any]):
-        """Handle an incoming message (text or photo)."""
+        """Handle an incoming message (text, photo, or document)."""
         try:
             message = update.get('message', {})
             chat_id = message.get('chat', {}).get('id')
 
             if not chat_id:
+                # Log what we received if no chat_id
+                logger.debug(f"Update without chat_id: {list(update.keys())}")
                 return
 
             # Check if chat is allowed
             if self.allowed_chat_id and chat_id != self.allowed_chat_id:
                 logger.warning(f"Ignoring message from unauthorized chat: {chat_id}")
                 return
+
+            # Log message type for debugging
+            msg_types = []
+            if message.get('photo'):
+                msg_types.append('photo')
+            if message.get('document'):
+                msg_types.append('document')
+            if message.get('text'):
+                msg_types.append('text')
+            if message.get('caption'):
+                msg_types.append('caption')
+            logger.debug(f"Received message types: {msg_types}")
 
             # Check if this is a photo message
             if message.get('photo'):
@@ -485,6 +509,7 @@ class TelegramBot:
 
             # Check if this is a document message
             if message.get('document'):
+                logger.info(f"Document detected: {message.get('document', {}).get('file_name', 'unknown')}")
                 self.handle_document(update)
                 return
 

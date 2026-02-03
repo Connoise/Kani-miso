@@ -172,9 +172,13 @@ class Processor:
                     except (json.JSONDecodeError, TypeError):
                         image_paths = []
 
+                # Log what we found for this capture
+                logger.debug(f"Capture {capture['id']}: document_paths={document_paths}, image_paths={image_paths}, type={capture['type']}")
+
                 # Process with Claude based on capture type
                 if document_paths:
                     # Document captures (PDFs) - extract text and process
+                    logger.info(f"Processing capture {capture['id']} as PDF document: {document_paths}")
                     markdown = self._process_document_capture(capture, document_paths, specs_dir)
                 elif image_paths:
                     logger.info(f"Processing capture {capture['id']} ({capture['type']}) with {len(image_paths)} images")
