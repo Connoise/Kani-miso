@@ -20,6 +20,7 @@ sys.path.append(str(Path(__file__).parent))
 from queue_manager import QueueManager
 from utils.logger import setup_logger
 from utils.image_manager import ImageManager
+from utils.document_manager import DocumentManager
 
 # Load environment
 load_dotenv(Path(__file__).parent.parent / "config" / ".env")
@@ -63,9 +64,15 @@ class TelegramBot:
         # Initialize image manager
         self.image_manager = ImageManager(notes_root, bot_token)
 
+        # Initialize document manager
+        self.document_manager = DocumentManager(notes_root, bot_token)
+
         # Image configuration
         self.images_enabled = self.config.get('images', {}).get('enabled', True)
         self.max_pending_images = self.config.get('images', {}).get('max_pending_images', 10)
+
+        # Document configuration
+        self.documents_enabled = self.config.get('documents', {}).get('enabled', True)
 
         logger.info("Telegram bot initialized")
         if self.allowed_chat_id:
@@ -310,6 +317,105 @@ class TelegramBot:
             if chat_id:
                 self.send_message(chat_id, f"❌ Error: {str(e)}")
 
+    def handle_document(self, update: Dict[str, Any]):
+        """Handle an incoming document message (PDF, etc.)."""
+        chat_id = None
+        try:
+            message = update.get('message', {})
+            chat_id = message.get('chat', {}).get('id')
+            document = message.get('document', {})
+            caption = message.get('caption', '')
+
+            if not chat_id or not document:
+                return
+
+            # Check if chat is allowed
+            if self.allowed_chat_id and chat_id != self.allowed_chat_id:
+                logger.warning(f"Ignoring document from unauthorized chat: {chat_id}")
+                return
+
+            if not self.documents_enabled:
+                self.send_message(chat_id, "❌ Document capture is disabled")
+                return
+
+            # Get document info
+            file_id = document.get('file_id')
+            file_name = document.get('file_name', 'document')
+            mime_type = document.get('mime_type', '')
+            file_size = document.get('file_size', 0)
+
+            # Check if it's a processable document type
+            if not self.document_manager.is_processable(file_name):
+                self.send_message(
+                    chat_id,
+                    f"⚠️ Document type not supported for processing: {file_name}\n"
+                    f"Currently only PDF files can be processed."
+                )
+                return
+
+            # Check file size (Telegram bot API limit)
+            max_size = 20 * 1024 * 1024  # 20MB
+            if file_size > max_size:
+                self.send_message(
+                    chat_id,
+                    f"❌ File too large: {file_size / 1024 / 1024:.1f}MB (max 20MB)"
+                )
+                return
+
+            # Download and save the document
+            captured_at = datetime.now()
+            local_path, error = self.document_manager.download_telegram_document(
+                file_id=file_id,
+                file_name=file_name,
+                mime_type=mime_type,
+                captured_at=captured_at,
+            )
+
+            if error:
+                self.send_message(chat_id, f"❌ Failed to save document: {error}")
+                return
+
+            # Parse caption if present (for context)
+            parsed = self.parse_message(caption) if caption else {'body': '', 'type': 'Source'}
+
+            # Force type to Source for documents
+            parsed['type'] = 'Source'
+
+            # Create the capture with document path
+            capture_id = self.queue.add_capture(
+                body=parsed['body'] or f"PDF: {file_name}",
+                captured_at=captured_at,
+                type='Source',
+                surface=parsed.get('surface') or 'mobile',
+                telegram_message_id=message.get('message_id'),
+                mood=parsed.get('mood'),
+                energy=parsed.get('energy'),
+                confidence=parsed.get('confidence'),
+                trigger=parsed.get('trigger'),
+                context=parsed.get('context'),
+            )
+
+            # Update capture with document path
+            self.queue.update_capture_document_paths(capture_id, [str(local_path)])
+
+            # Confirm
+            relative_path = self.document_manager.get_relative_path(local_path)
+            confirmation = (
+                f"✅ Document captured #{capture_id}\n"
+                f"📄 {file_name}\n"
+                f"📁 {relative_path}"
+            )
+            if parsed['body'] and parsed['body'] != f"PDF: {file_name}":
+                confirmation += f"\n📝 Context: {parsed['body'][:50]}..."
+
+            self.send_message(chat_id, confirmation)
+            logger.info(f"Document captured: {file_name} -> {local_path}")
+
+        except Exception as e:
+            logger.error(f"Error handling document: {e}", exc_info=True)
+            if chat_id:
+                self.send_message(chat_id, f"❌ Error: {str(e)}")
+
     def _create_capture_with_images(
         self,
         chat_id: int,
@@ -375,6 +481,11 @@ class TelegramBot:
             # Check if this is a photo message
             if message.get('photo'):
                 self.handle_photo(update)
+                return
+
+            # Check if this is a document message
+            if message.get('document'):
+                self.handle_document(update)
                 return
 
             text = message.get('text', '')
