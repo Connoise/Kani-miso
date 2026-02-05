@@ -61,6 +61,11 @@ class TelegramBot:
         queue_db = repo_root / "queue" / "captures.db"
         self.queue = QueueManager(queue_db)
 
+        # Load persisted last_update_id from database
+        self.last_update_id = self.queue.get_last_update_id()
+        if self.last_update_id > 0:
+            logger.info(f"Resuming from last update ID: {self.last_update_id}")
+
         # Initialize image manager
         self.image_manager = ImageManager(notes_root, bot_token)
 
@@ -570,6 +575,8 @@ class TelegramBot:
                 for update in updates:
                     self.last_update_id = update['update_id']
                     self.handle_message(update)
+                    # Persist update ID so we don't lose messages on restart
+                    self.queue.set_last_update_id(self.last_update_id)
 
         except KeyboardInterrupt:
             logger.info("\nBot stopped by user")
