@@ -65,6 +65,8 @@ class TelegramBot:
         self.last_update_id = self.queue.get_last_update_id()
         if self.last_update_id > 0:
             logger.info(f"Resuming from last update ID: {self.last_update_id}")
+        else:
+            logger.info("No saved update ID found - will fetch all pending updates from Telegram")
 
         # Initialize image manager
         self.image_manager = ImageManager(notes_root, bot_token)
@@ -115,7 +117,12 @@ class TelegramBot:
         try:
             response = requests.get(url, params=params, timeout=timeout + 2)
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            # Debug: log what we're getting from Telegram
+            updates = result.get('result', [])
+            if updates:
+                logger.info(f"Received {len(updates)} updates from Telegram (offset was {self.last_update_id + 1})")
+            return result
         except KeyboardInterrupt:
             raise
         except Exception as e:
