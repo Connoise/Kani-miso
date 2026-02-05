@@ -71,6 +71,15 @@ class QueueManager:
                 )
             """)
 
+            # Table for bot state persistence
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS bot_state (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             conn.commit()
 
             # Run migrations for existing databases
@@ -449,3 +458,41 @@ class QueueManager:
             )
             conn.commit()
         logger.debug(f"Updated capture {capture_id} with {len(image_paths)} image paths")
+
+    # === Bot state persistence methods ===
+
+    def get_last_update_id(self) -> int:
+        """
+        Get the last processed Telegram update ID.
+
+        Returns:
+            Last update ID, or 0 if not set
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT value FROM bot_state WHERE key = 'last_update_id'"
+            )
+            row = cursor.fetchone()
+            if row:
+                return int(row['value'])
+            return 0
+
+    def set_last_update_id(self, update_id: int) -> None:
+        """
+        Save the last processed Telegram update ID.
+
+        Args:
+            update_id: The update ID to save
+        """
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO bot_state (key, value, updated_at)
+                VALUES ('last_update_id', ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = excluded.updated_at
+                """,
+                (str(update_id), datetime.now().isoformat()),
+            )
+            conn.commit()

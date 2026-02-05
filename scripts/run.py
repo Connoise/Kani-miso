@@ -56,7 +56,6 @@ class SecondBrainRunner:
             self.allowed_chat_id = int(self.allowed_chat_id)
 
         self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
-        self.last_update_id = 0
         self.process_interval = process_interval
         self.auto_process = auto_process
         self.running = True
@@ -66,6 +65,11 @@ class SecondBrainRunner:
         repo_root = Path(__file__).parent.parent
         queue_db = repo_root / "queue" / "captures.db"
         self.queue = QueueManager(queue_db)
+
+        # Load persisted last_update_id from database
+        self.last_update_id = self.queue.get_last_update_id()
+        if self.last_update_id > 0:
+            logger.info(f"Resuming from last update ID: {self.last_update_id}")
 
         logger.info("Second Brain Runner initialized")
         if self.allowed_chat_id:
@@ -264,6 +268,8 @@ class SecondBrainRunner:
                     for update in result.get('result', []):
                         self.last_update_id = update['update_id']
                         self.handle_message(update)
+                        # Persist update ID so we don't lose messages on restart
+                        self.queue.set_last_update_id(self.last_update_id)
 
                 # Auto-process if enabled
                 if self.auto_process:
