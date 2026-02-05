@@ -12,6 +12,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 
+# Handle both module and direct execution
+if __name__ == "__main__" and __package__ is None:
+    # Running directly - add parent to path for imports
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    __package__ = "scripts.personal_analysis"
+
 import anthropic
 
 from .condensers import (
