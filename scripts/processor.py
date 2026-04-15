@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 sys.path.append(str(Path(__file__).parent))
 
 from queue_manager import QueueManager
-from processors.claude_client import ClaudeClient
+from processors.llm_client import build_llm_client
 from processors.file_writer import FileWriter
 from processors.git_manager import GitManager
 from processors.web_fetcher import WebFetcher
@@ -83,12 +83,8 @@ class Processor:
         # Reset any stuck 'processing' items
         self.queue.reset_processing()
 
-        # Claude client
-        self.claude = ClaudeClient(
-            model=self.config['claude']['model'],
-            max_tokens=self.config['claude']['max_tokens'],
-            temperature=self.config['claude']['temperature'],
-        )
+        # LLM client (Claude, Ollama, or hybrid — selected via config['llm'])
+        self.llm = build_llm_client(self.config)
 
         # File writer (notes go to notes_root, which may differ from repo_root)
         self.file_writer = FileWriter(
@@ -178,7 +174,7 @@ class Processor:
                     markdown = self._process_document_capture(capture, document_paths, specs_dir)
                 elif image_paths:
                     logger.info(f"Processing capture {capture['id']} ({capture['type']}) with {len(image_paths)} images")
-                    markdown = self.claude.process_capture_with_images(
+                    markdown = self.llm.process_capture_with_images(
                         capture,
                         image_paths,
                         specs_dir,
@@ -189,7 +185,7 @@ class Processor:
                     markdown = self._process_source_capture(capture, specs_dir)
                 else:
                     logger.info(f"Processing capture {capture['id']} ({capture['type']})")
-                    markdown = self.claude.process_telegram_capture(capture, specs_dir)
+                    markdown = self.llm.process_telegram_capture(capture, specs_dir)
 
                 # Write to file
                 file_path = self.file_writer.write_note(markdown, capture)
@@ -264,7 +260,7 @@ class Processor:
             if web_content['success']:
                 logger.info(f"Successfully fetched webpage: {web_content['metadata'].get('title', 'Unknown')}")
                 # Process with source-specific prompt
-                return self.claude.process_source_capture(capture, web_content, specs_dir)
+                return self.llm.process_source_capture(capture, web_content, specs_dir)
             else:
                 # Webpage fetch failed - log error and fall back to basic processing
                 logger.warning(f"Failed to fetch webpage: {web_content['error']}")
@@ -278,7 +274,7 @@ class Processor:
                     'markdown_content': f"[Webpage content could not be fetched: {web_content['error']}]",
                     'error': web_content['error'],
                 }
-                return self.claude.process_source_capture(capture, web_content, specs_dir)
+                return self.llm.process_source_capture(capture, web_content, specs_dir)
         else:
             # No URL found - process as regular source without web content
             logger.info(f"Processing source capture {capture['id']} (no URL detected)")
@@ -292,7 +288,7 @@ class Processor:
                 'error': 'No URL provided',
             }
             # Fall back to telegram processing for non-URL sources
-            return self.claude.process_telegram_capture(capture, specs_dir)
+            return self.llm.process_telegram_capture(capture, specs_dir)
 
     def _process_document_capture(
         self,
@@ -315,7 +311,7 @@ class Processor:
         # (future: could combine multiple PDFs)
         if not document_paths:
             logger.warning(f"No document paths found for capture {capture['id']}")
-            return self.claude.process_telegram_capture(capture, specs_dir)
+            return self.llm.process_telegram_capture(capture, specs_dir)
 
         doc_path = Path(document_paths[0])
         logger.info(f"Processing document capture {capture['id']}: {doc_path.name}")
@@ -323,7 +319,7 @@ class Processor:
         # Check if it's a PDF
         if doc_path.suffix.lower() != '.pdf':
             logger.warning(f"Non-PDF document: {doc_path.suffix}. Falling back to text processing.")
-            return self.claude.process_telegram_capture(capture, specs_dir)
+            return self.llm.process_telegram_capture(capture, specs_dir)
 
         # Extract text from PDF
         pdf_content = self.pdf_processor.extract_text(doc_path)
@@ -334,7 +330,7 @@ class Processor:
                 f"{len(pdf_content['text'])} characters"
             )
             # Process with PDF-specific prompt
-            return self.claude.process_pdf_capture(capture, pdf_content, specs_dir)
+            return self.llm.process_pdf_capture(capture, pdf_content, specs_dir)
         else:
             # PDF extraction failed - log error and try basic processing
             logger.warning(f"Failed to extract PDF text: {pdf_content['error']}")
@@ -351,7 +347,7 @@ class Processor:
                 'file_name': doc_path.name,
                 'error': pdf_content['error'],
             }
-            return self.claude.process_pdf_capture(capture, pdf_content, specs_dir)
+            return self.llm.process_pdf_capture(capture, pdf_content, specs_dir)
 
     def show_stats(self):
         """Display queue statistics."""

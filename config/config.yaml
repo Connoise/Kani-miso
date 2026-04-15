@@ -31,6 +31,33 @@ claude:
   temperature: 0.7  # Slightly creative but consistent
   # Alternative: claude-sonnet-4-5-20250929 for faster/cheaper (still excellent)
 
+# LLM backend selection
+# primary: hybrid (default) routes cheap captures to local Ollama and
+# nuance-critical captures (Reflection, Source, PDF) to Claude. Set to
+# "claude" to disable local processing entirely, or "ollama" to go local-only.
+llm:
+  primary: hybrid                   # hybrid | claude | ollama
+  fallback_to_claude: true          # auto-fallback to Claude on local failure
+
+  # Per-branch routing overrides. Valid values: local | claude | local_with_fallback
+  routing:
+    pdf: claude
+    source: claude
+    reflection: claude
+    images: local_with_fallback
+    default: local
+
+  ollama:
+    enabled: true
+    base_url: "http://localhost:11434"
+    model: "gemma4:e4b"
+    temperature: 0.7
+    num_predict: 4096               # equivalent of max_tokens
+    timeout_seconds: 120
+    prompt_profile: "local"         # specs/prompts/<profile>/
+    verbatim_validation: strict     # strict | lenient | off
+    retry_on_validation_fail: 1     # local retries before falling back to Claude
+
 git:
   commit_prefix: "process"  # Commit message prefix
   branch_strategy: "main"  # Commit directly to main

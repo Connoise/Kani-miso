@@ -15,11 +15,12 @@ import anthropic
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 from utils.logger import setup_logger
+from processors.llm_client import LLMClient
 
 logger = setup_logger(__name__)
 
 
-class ClaudeClient:
+class ClaudeClient(LLMClient):
     """Client for processing captures using Claude API."""
 
     def __init__(
