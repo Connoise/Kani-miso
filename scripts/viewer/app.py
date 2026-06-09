@@ -1,5 +1,5 @@
 """
-Flask web application for Second-Brain viewer.
+Flask web application for Kani-miso viewer.
 Provides read-only web interface to browse notes, hubs, and graph.
 """
 

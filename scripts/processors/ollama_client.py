@@ -1,5 +1,5 @@
 """
-Ollama LLM backend for Second Brain.
+Ollama LLM backend for Kani-miso.
 
 Talks to a local Ollama server over HTTP using the /api/chat endpoint. Uses
 a compact prompt profile (specs/prompts/<profile>/) tuned for small local

@@ -1,5 +1,5 @@
 """
-Git Manager for Second Brain
+Git Manager for Kani-miso
 Handles Git operations (add, commit, push) safely.
 """
 

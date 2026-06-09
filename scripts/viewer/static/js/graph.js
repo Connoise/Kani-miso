@@ -1,5 +1,5 @@
 /**
- * D3.js Force-directed graph visualization for Second Brain
+ * D3.js Force-directed graph visualization for Kani-miso
  */
 
 function initGraph(containerId, dataUrl) {

@@ -1,5 +1,5 @@
 """
-Main Processor for Second Brain
+Main Processor for Kani-miso
 Orchestrates the processing of queued captures.
 Supports both text-only and image+text captures.
 """
@@ -68,7 +68,7 @@ class Processor:
         )
 
         logger.info("=" * 60)
-        logger.info("Second Brain Processor Starting")
+        logger.info("Kani-miso Processor Starting")
         logger.info("=" * 60)
 
         # Initialize components
@@ -369,7 +369,7 @@ def main():
     """Main entry point."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Second Brain Processor")
+    parser = argparse.ArgumentParser(description="Kani-miso Processor")
     parser.add_argument(
         '--batch-size',
         type=int,

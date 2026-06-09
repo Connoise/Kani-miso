@@ -1,5 +1,5 @@
 """
-LLM Client Abstraction for Second Brain
+LLM Client Abstraction for Kani-miso
 
 Defines the backend-agnostic interface that all interpretation backends must
 implement (Claude API, local Ollama, hybrid dispatcher, etc.), plus shared

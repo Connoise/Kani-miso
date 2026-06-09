@@ -1,5 +1,5 @@
 """
-Markdown and wikilink parser for Second-Brian viewer.
+Markdown and wikilink parser for Kani-miso viewer.
 Handles frontmatter, wikilink extraction, and markdown rendering.
 """
 

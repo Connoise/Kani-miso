@@ -1,6 +1,6 @@
 # SDD Inconsistencies, Underspecifications, and Oddities
 
-Analysis of the Second Brain specification documents, identifying 20 points that are underspecified, inconsistent, or architecturally peculiar.
+Analysis of the Kani-miso specification documents, identifying 20 points that are underspecified, inconsistent, or architecturally peculiar.
 
 ---
 

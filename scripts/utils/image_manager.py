@@ -1,5 +1,5 @@
 """
-Image Manager for Second Brain
+Image Manager for Kani-miso
 Handles downloading images from Telegram and organizing them by date.
 """
 

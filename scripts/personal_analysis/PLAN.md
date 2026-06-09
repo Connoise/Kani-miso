@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary
 
-This document plans a function that performs **deep personal analysis** of all notes and tweets in the Second-Brian Obsidian vault. Using Claude Opus 4.5, the function will generate multiple structured markdown documents offering multidisciplinary character analysis, pattern recognition, and actionable self-improvement guidance.
+This document plans a function that performs **deep personal analysis** of all notes and tweets in the Kani-miso Obsidian vault. Using Claude Opus 4.5, the function will generate multiple structured markdown documents offering multidisciplinary character analysis, pattern recognition, and actionable self-improvement guidance.
 
 ### Core Philosophy
 
@@ -17,7 +17,7 @@ The analysis will be:
 - **Brutally honest** — No placation, no softening of difficult truths
 - **Multidimensional** — Psychological, emotional, ethical, spiritual, intellectual, philosophical
 - **Pattern-emergent** — Insights only visible from aggregate data
-- **Preservationist** — Following Second-Brian's core principle of preserving meaning over clarity
+- **Preservationist** — Following Kani-miso's core principle of preserving meaning over clarity
 
 ---
 
@@ -1379,9 +1379,9 @@ I struggle with too?" This could transform criticism into self-compassion.
 
 ---
 
-## 17. Appendix: Alignment with Second-Brian Philosophy
+## 17. Appendix: Alignment with Kani-miso Philosophy
 
-This analysis function aligns with Second-Brian's core principles:
+This analysis function aligns with Kani-miso's core principles:
 
 | Principle | How This Function Honors It |
 |-----------|----------------------------|
@@ -1405,7 +1405,7 @@ This section documents key design decisions made during planning.
 |----------|----------|-----------|
 | **Context window overflow** | Stratified temporal sampling | Preserves representation across full timeline; prioritizes emotional content and well-linked notes |
 | **Reflections folder** | Include, treat same as notes | Reflections contain valuable emotional signal; no reason to exclude |
-| **Re-run behavior** | Timestamped snapshots (`/analysis/YYYY-MM/`) | Preserves history; enables comparison across time; aligns with Second-Brian preservation philosophy |
+| **Re-run behavior** | Timestamped snapshots (`/analysis/YYYY-MM/`) | Preserves history; enables comparison across time; aligns with Kani-miso preservation philosophy |
 | **Minimum data threshold** | Run anyway with warnings | User may still gain value from limited analysis; explicit confidence warnings manage expectations |
 | **Private content** | Include as-is, no anonymization | Analysis is personal; anonymization reduces insight quality; user is sole reader |
 | **Image analysis** | Include via Claude vision | Photos reveal patterns invisible in text; visual self-expression is meaningful |

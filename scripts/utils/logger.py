@@ -1,5 +1,5 @@
 """
-Logging utility for Second Brain automation.
+Logging utility for Kani-miso automation.
 Provides consistent logging across all modules.
 """
 

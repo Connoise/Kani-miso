@@ -1,4 +1,4 @@
-# Second Brain - Personal Knowledge Archive Automation
+# Kani-miso - Personal Knowledge Archive Automation
 # Python 3.11+ required
 
 # Telegram Bot (using HTTP API directly)

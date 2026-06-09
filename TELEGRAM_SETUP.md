@@ -12,9 +12,9 @@ This guide will help you set up the Telegram bot for automatic capture from your
 
 3. **Send `/newbot`** to BotFather
 
-4. **Choose a name** for your bot (e.g., "My Second Brain")
+4. **Choose a name** for your bot (e.g., "My Kani-miso")
 
-5. **Choose a username** for your bot (must end in 'bot', e.g., "mysecondbrainbot")
+5. **Choose a username** for your bot (must end in 'bot', e.g., "mykanimisobot")
 
 6. **Copy the API token** that BotFather gives you
    - It looks like: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`
@@ -106,7 +106,7 @@ Create a batch file to run the bot in the background:
 **File: `run_telegram_bot.bat`**
 ```batch
 @echo off
-cd /d "C:\Users\gilli\Desktop\Connor Work\Github\Second-Brian"
+cd /d "C:\Users\gilli\Desktop\Connor Work\Github\Kani-miso"
 python scripts/telegram_bot.py
 pause
 ```

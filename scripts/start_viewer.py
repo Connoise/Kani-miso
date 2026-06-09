@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Launcher script for Second-Brain viewer.
+Launcher script for Kani-miso viewer.
 Reads configuration and starts the Flask web server.
 """
 

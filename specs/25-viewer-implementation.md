@@ -1,4 +1,4 @@
-# Implementation Guide: Second Brain Web Viewer
+# Implementation Guide: Kani-miso Web Viewer
 
 > **Version**: 1.0
 > **Prerequisite**: Read `specs/24-viewer-spec.md` first.
@@ -660,7 +660,7 @@ CREATE INDEX idx_links_source ON links(source_id);
 ```python
 # scripts/viewer.py
 #!/usr/bin/env python3
-"""Second Brain Web Viewer - Flask-based vault browser."""
+"""Kani-miso Web Viewer - Flask-based vault browser."""
 
 import argparse
 import sys
@@ -668,7 +668,7 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Start the Second Brain web viewer'
+        description='Start the Kani-miso web viewer'
     )
     parser.add_argument(
         '--port', '-p',

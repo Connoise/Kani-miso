@@ -1,5 +1,5 @@
 """
-Web Fetcher for Second Brain
+Web Fetcher for Kani-miso
 Handles fetching webpages and converting HTML to markdown.
 """
 

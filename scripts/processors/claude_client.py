@@ -1,5 +1,5 @@
 """
-Claude API Client for Second Brain
+Claude API Client for Kani-miso
 Handles communication with Anthropic's Claude API for processing captures.
 Supports both text and image (Vision) processing.
 """

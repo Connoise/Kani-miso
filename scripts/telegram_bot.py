@@ -1,5 +1,5 @@
 """
-Telegram Bot for Second Brain
+Telegram Bot for Kani-miso
 Uses Telegram HTTP API directly (no library dependencies, works with Python 3.14)
 Supports both text messages and image captures.
 """
@@ -212,7 +212,7 @@ class TelegramBot:
         """Handle bot commands."""
         if command == '/start':
             welcome = (
-                f"🧠 *Second Brain Bot*\n\n"
+                f"🧠 *Kani-miso Bot*\n\n"
                 f"Your chat ID: `{chat_id}`\n\n"
                 f"Send me your thoughts and I'll save them to the queue!\n\n"
                 f"Commands:\n"
@@ -562,7 +562,7 @@ class TelegramBot:
     def run(self):
         """Run the bot (blocking)."""
         logger.info("=" * 60)
-        logger.info("Second Brain Telegram Bot Starting")
+        logger.info("Kani-miso Telegram Bot Starting")
         logger.info("=" * 60)
         logger.info("Bot is running. Press Ctrl+C to stop.")
         logger.info("")

@@ -1,5 +1,5 @@
 """
-Hub Analyzer for Second Brain
+Hub Analyzer for Kani-miso
 Analyzes notes, tweets, and images to suggest hubs for creation using Claude.
 """
 

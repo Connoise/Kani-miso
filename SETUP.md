@@ -1,4 +1,4 @@
-# Second Brain - Automation Setup Guide
+# Kani-miso - Automation Setup Guide
 
 This guide will help you set up the automation system for processing Telegram captures.
 
@@ -16,7 +16,7 @@ This guide will help you set up the automation system for processing Telegram ca
 ### Step 1: Install Python Dependencies
 
 ```bash
-cd "C:\Users\gilli\Desktop\Connor Work\Github\Second-Brian"
+cd "C:\Users\gilli\Desktop\Connor Work\Github\Kani-miso"
 pip install -r requirements.txt
 ```
 
@@ -194,7 +194,7 @@ pip install -r requirements.txt
 
 Make sure you're running commands from the repository root:
 ```bash
-cd "C:\Users\gilli\Desktop\Connor Work\Github\Second-Brian"
+cd "C:\Users\gilli\Desktop\Connor Work\Github\Kani-miso"
 ```
 
 ### Processing Fails with API Error

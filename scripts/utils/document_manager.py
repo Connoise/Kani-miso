@@ -1,5 +1,5 @@
 """
-Document Manager for Second Brain
+Document Manager for Kani-miso
 Handles downloading documents (PDFs, etc.) from Telegram and organizing them by date.
 """
 
