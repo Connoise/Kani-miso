@@ -1,4 +1,4 @@
-# Future Enhancements for Second Brain
+# Future Enhancements for Kani-miso
 
 This document outlines potential improvements to the note processing, analyzing, and storing system.
 

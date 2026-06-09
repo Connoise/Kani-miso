@@ -29,7 +29,7 @@ def check_item(name, condition, required=True):
 def main():
     """Run all setup checks."""
     print("\n" + "=" * 60)
-    print("Second Brain Setup Verification")
+    print("Kani-miso Setup Verification")
     print("=" * 60 + "\n")
 
     all_good = True

@@ -1,5 +1,5 @@
 """
-Combined Runner for Second Brain
+Combined Runner for Kani-miso
 Runs Telegram bot with automatic periodic processing.
 
 Usage:
@@ -31,7 +31,7 @@ load_dotenv(Path(__file__).parent.parent / "config" / ".env")
 logger = setup_logger(__name__)
 
 
-class SecondBrainRunner:
+class KaniMisoRunner:
     """Combined Telegram bot + processor runner."""
 
     def __init__(
@@ -71,7 +71,7 @@ class SecondBrainRunner:
         if self.last_update_id > 0:
             logger.info(f"Resuming from last update ID: {self.last_update_id}")
 
-        logger.info("Second Brain Runner initialized")
+        logger.info("Kani-miso Runner initialized")
         if self.allowed_chat_id:
             logger.info(f"Listening to chat ID: {self.allowed_chat_id}")
         if self.auto_process:
@@ -177,7 +177,7 @@ class SecondBrainRunner:
         """Handle bot commands."""
         if command == '/start':
             self.send_message(chat_id, (
-                f"🧠 *Second Brain Bot*\n\n"
+                f"🧠 *Kani-miso Bot*\n\n"
                 f"Chat ID: `{chat_id}`\n\n"
                 f"Commands:\n"
                 f"/process - Process queue now\n"
@@ -247,7 +247,7 @@ class SecondBrainRunner:
     def run(self):
         """Main run loop."""
         logger.info("=" * 60)
-        logger.info("Second Brain Running")
+        logger.info("Kani-miso Running")
         logger.info("=" * 60)
         logger.info("Press Ctrl+C to stop")
         logger.info("")
@@ -288,7 +288,7 @@ class SecondBrainRunner:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Second Brain Runner")
+    parser = argparse.ArgumentParser(description="Kani-miso Runner")
     parser.add_argument(
         '--interval', '-i',
         type=int,
@@ -302,7 +302,7 @@ def main():
     )
     args = parser.parse_args()
 
-    runner = SecondBrainRunner(
+    runner = KaniMisoRunner(
         process_interval=args.interval,
         auto_process=not args.manual,
     )

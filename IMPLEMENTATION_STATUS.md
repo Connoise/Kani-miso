@@ -1,4 +1,4 @@
-# Second Brain Automation - Implementation Status
+# Kani-miso Automation - Implementation Status
 
 **Date:** 2026-01-13
 **Phase:** 2 (Telegram Bot Integration)
@@ -10,7 +10,7 @@
 
 ### 1. Directory Structure
 ```
-Second-Brian/
+Kani-miso/
 ├── config/
 │   ├── config.yaml           ✓ Main configuration
 │   └── .env.example          ✓ Environment template
@@ -79,7 +79,7 @@ Second-Brian/
 
 ### Step 1: Install Dependencies
 ```bash
-cd "C:\Users\gilli\Desktop\Connor Work\Github\Second-Brian"
+cd "C:\Users\gilli\Desktop\Connor Work\Github\Kani-miso"
 pip install -r requirements.txt
 ```
 

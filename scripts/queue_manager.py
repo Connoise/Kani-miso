@@ -1,5 +1,5 @@
 """
-Queue Manager for Second Brain
+Queue Manager for Kani-miso
 Handles durable storage of unprocessed captures using SQLite.
 """
 

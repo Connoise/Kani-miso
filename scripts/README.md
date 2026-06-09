@@ -1,6 +1,6 @@
-# Second Brain Automation Scripts
+# Kani-miso Automation Scripts
 
-This directory contains the automation system for processing Telegram captures into the Second Brain archive.
+This directory contains the automation system for processing Telegram captures into the Kani-miso archive.
 
 ## Architecture Overview
 

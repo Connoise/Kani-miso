@@ -878,7 +878,7 @@ The following decisions have been made:
 
 ---
 
-## 9. Integration with Second-Brian
+## 9. Integration with Kani-miso
 
 ### 9.1 Alignment with Core Principles
 

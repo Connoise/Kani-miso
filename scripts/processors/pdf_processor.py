@@ -1,5 +1,5 @@
 """
-PDF Processor for Second Brain
+PDF Processor for Kani-miso
 Handles extracting text and metadata from PDF files.
 """
 

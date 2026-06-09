@@ -1,5 +1,5 @@
 """
-Hybrid LLM dispatcher for Second Brain.
+Hybrid LLM dispatcher for Kani-miso.
 
 Wraps an OllamaClient (primary, cheap) and a ClaudeClient (fallback, nuance)
 behind a single LLMClient interface. Decides per-capture which backend to

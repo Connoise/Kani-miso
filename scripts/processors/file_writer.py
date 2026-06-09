@@ -1,5 +1,5 @@
 """
-File Writer for Second Brain
+File Writer for Kani-miso
 Handles creation and writing of markdown files.
 """
 

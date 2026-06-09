@@ -1,14 +1,14 @@
-# Specification: Second Brain Web Viewer
+# Specification: Kani-miso Web Viewer
 
 > **Version**: 1.0
 > **Status**: Draft
-> **Purpose**: Define a lightweight, read-only web viewer for the Second Brain vault.
+> **Purpose**: Define a lightweight, read-only web viewer for the Kani-miso vault.
 
 ---
 
 ## 1. Overview
 
-The **Web Viewer** is a Flask-based web application that provides browser-based access to the Second Brain vault. It complements the existing Tauri desktop application by offering:
+The **Web Viewer** is a Flask-based web application that provides browser-based access to the Kani-miso vault. It complements the existing Tauri desktop application by offering:
 
 - **Zero-install access** via any modern browser
 - **Lightweight deployment** (Python + Flask, no Node.js build step)
@@ -41,7 +41,7 @@ The interface draws inspiration from Wikipedia's design:
 **Why Wikipedia?**
 - Users already understand the interaction model
 - Link-heavy content benefits from clean typography
-- Navigation patterns match Second Brain philosophy
+- Navigation patterns match Kani-miso philosophy
 
 ---
 
@@ -465,36 +465,36 @@ with open(note_path, 'r', encoding='utf-8') as f:
 
 ## 6. Configuration
 
-The viewer reads the existing `config.yaml` from the Second-Brian system.
+The viewer reads the existing `config.yaml` from the Kani-miso system.
 
 ### Required Config Fields
 
 ```yaml
 vault:
   path: "C:\\Users\\...\\Obsidian Notes"  # Vault root
-  name: "My Second Brain"  # Vault name for Obsidian URIs (optional)
+  name: "My Kani-miso"  # Vault name for Obsidian URIs (optional)
 
 viewer:  # Optional section for viewer-specific settings
   host: "127.0.0.1"      # Default: localhost only
   port: 5000             # Default: 5000
   debug: false           # Default: false
-  index_path: "~/.second-brian/viewer/index.db"  # Outside vault (read-only principle)
+  index_path: "~/.kani-miso/viewer/index.db"  # Outside vault (read-only principle)
 ```
 
 **Index Path Philosophy**:
-- Default location: `~/.second-brian/viewer/index.db` (user's home directory)
+- Default location: `~/.kani-miso/viewer/index.db` (user's home directory)
 - Alternative: System temp directory
 - **Never inside vault**: Preserves read-only vault principle
 - Index is disposable cache, can be rebuilt anytime
 - Per-vault index: Hash vault path into index filename for multi-vault support
-  - Example: `~/.second-brian/viewer/index-{vault_hash}.db`
+  - Example: `~/.kani-miso/viewer/index-{vault_hash}.db`
 
 ### Config Loading
 
 ```python
 def load_config():
     config_paths = [
-        Path.home() / '.second-brian' / 'config.yaml',
+        Path.home() / '.kani-miso' / 'config.yaml',
         Path.cwd() / 'config.yaml',
     ]
     for path in config_paths:

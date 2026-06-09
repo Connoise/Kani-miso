@@ -1,5 +1,5 @@
 """
-Twitter Archive Processor for Second Brain
+Twitter Archive Processor for Kani-miso
 Processes exported Twitter archive data and adds tweets to the processing queue.
 
 Twitter archive format:
@@ -175,7 +175,7 @@ class TwitterArchiveProcessor:
 
     def format_tweet_body(self, tweet: Dict[str, Any]) -> str:
         """
-        Format tweet content for Second Brain.
+        Format tweet content for Kani-miso.
 
         Args:
             tweet: Tweet dictionary
@@ -391,7 +391,7 @@ def parse_date(date_str: str) -> datetime:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Process Twitter archive and add tweets to Second Brain queue"
+        description="Process Twitter archive and add tweets to Kani-miso queue"
     )
     parser.add_argument(
         "archive_path",

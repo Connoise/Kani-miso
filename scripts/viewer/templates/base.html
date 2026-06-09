@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Second Brain Viewer{% endblock %}</title>
+    <title>{% block title %}Kani-miso Viewer{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block extra_head %}{% endblock %}
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-content">
-            <a href="/" class="nav-brand">Second Brain</a>
+            <a href="/" class="nav-brand">Kani-miso</a>
             <div class="nav-links">
                 <a href="/timeline" class="nav-link">Timeline</a>
                 <a href="/hubs" class="nav-link">Hubs</a>
@@ -29,7 +29,7 @@
     </main>
 
     <footer class="footer">
-        <p>Second Brain Viewer - Read-only interface</p>
+        <p>Kani-miso Viewer - Read-only interface</p>
     </footer>
 
     {% block extra_scripts %}{% endblock %}

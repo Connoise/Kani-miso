@@ -1,5 +1,5 @@
 """
-Second-Brain Viewer - Read-only web interface for browsing notes and hubs.
+Kani-miso Viewer - Read-only web interface for browsing notes and hubs.
 """
 
 from .app import create_app

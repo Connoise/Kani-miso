@@ -1,5 +1,5 @@
 """
-SQLite indexer for Second-Brain viewer.
+SQLite indexer for Kani-miso viewer.
 Handles index creation, updates, and queries with FTS5 support.
 """
 
@@ -26,7 +26,7 @@ def get_index_path(vault_path: Path) -> Path:
     vault_hash = hashlib.md5(str(vault_path).encode()).hexdigest()[:8]
 
     # Use user's home directory
-    index_dir = Path.home() / '.second-brian' / 'viewer'
+    index_dir = Path.home() / '.kani-miso' / 'viewer'
     index_dir.mkdir(parents=True, exist_ok=True)
 
     return index_dir / f'index-{vault_hash}.db'

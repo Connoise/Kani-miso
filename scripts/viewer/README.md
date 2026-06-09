@@ -1,6 +1,6 @@
-# Second Brain Viewer
+# Kani-miso Viewer
 
-A read-only web interface for browsing and exploring your Second Brain knowledge archive.
+A read-only web interface for browsing and exploring your Kani-miso knowledge archive.
 
 ## Features
 
@@ -48,7 +48,7 @@ python scripts/start_viewer.py
 
 The SQLite index is stored outside the vault at:
 ```
-~/.second-brian/viewer/index-{vault_hash}.db
+~/.kani-miso/viewer/index-{vault_hash}.db
 ```
 
 This preserves the read-only principle - the vault is never modified.
