@@ -1,10 +1,9 @@
 """
 LLM Client Abstraction for Kani-miso
 
-Defines the backend-agnostic interface that all interpretation backends must
-implement (Claude API, local Ollama, hybrid dispatcher, etc.), plus shared
-helpers for prompt loading and image encoding, and a `build_llm_client`
-factory that wires the configured backend from `config.yaml`.
+Defines the interface that interpretation backends implement (Claude API),
+plus shared helpers for prompt loading and image encoding, and a
+`build_llm_client` factory that wires the client from `config.yaml`.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ logger = setup_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Shared helpers (used by both ClaudeClient and OllamaClient)
+# Shared helpers
 # ---------------------------------------------------------------------------
 
 
@@ -71,9 +70,8 @@ class LLMClient(ABC):
     """
     Abstract interface for capture-interpretation backends.
 
-    Every backend (ClaudeClient, OllamaClient, HybridLLMClient) implements the
-    same four process_* methods plus test_connection, so Processor can call
-    them interchangeably.
+    Implemented by ClaudeClient: four process_* methods plus test_connection,
+    so Processor can call any backend interchangeably.
     """
 
     @abstractmethod
@@ -124,90 +122,31 @@ class LLMClient(ABC):
 
 def build_llm_client(config: Dict[str, Any]) -> LLMClient:
     """
-    Build the configured LLM client from the top-level config dict.
+    Build the Claude client from the top-level config dict.
 
-    Reads the `llm:` block if present (primary: hybrid | claude | ollama).
-    If the `llm:` block is missing entirely, falls back to Claude-only mode,
-    preserving the pre-abstraction behavior for any config.yaml that hasn't
-    been migrated yet.
+    Claude is the only backend. A leftover `llm:` block requesting another
+    backend (ollama/hybrid, removed in Phase 0) is ignored with a warning.
 
     Args:
         config: Parsed config.yaml as a dict.
 
     Returns:
-        An LLMClient instance (ClaudeClient, OllamaClient, or HybridLLMClient).
+        A ClaudeClient instance.
     """
-    llm_config: Optional[Dict[str, Any]] = config.get("llm")
-
-    # Backwards-compat: no llm: block => pure Claude, matches old processor.
-    if not llm_config:
-        logger.info("No 'llm:' block in config; defaulting to Claude-only backend")
-        return _build_claude_client(config)
-
-    primary = (llm_config.get("primary") or "hybrid").lower()
-
-    if primary == "claude":
-        logger.info("Building Claude-only LLM backend")
-        return _build_claude_client(config)
-
-    if primary == "ollama":
-        logger.info("Building Ollama-only LLM backend")
-        return _build_ollama_client(config)
-
-    if primary == "hybrid":
-        logger.info("Building hybrid LLM backend (Ollama primary, Claude fallback)")
-        return _build_hybrid_client(config)
-
-    raise ValueError(
-        f"Unknown llm.primary value: {primary!r}. "
-        f"Expected one of: hybrid, claude, ollama."
-    )
-
-
-def _build_claude_client(config: Dict[str, Any]) -> "LLMClient":
-    """Build a ClaudeClient from the `claude:` block in config."""
     from processors.claude_client import ClaudeClient  # local import to avoid cycles
+
+    llm_config: Optional[Dict[str, Any]] = config.get("llm")
+    if llm_config:
+        primary = (llm_config.get("primary") or "claude").lower()
+        if primary != "claude":
+            logger.warning(
+                f"config llm.primary={primary!r} is no longer supported; "
+                f"local/hybrid backends were removed. Using Claude."
+            )
 
     claude_cfg = config.get("claude", {})
     return ClaudeClient(
         model=claude_cfg.get("model", "claude-opus-4-5-20251101"),
         max_tokens=claude_cfg.get("max_tokens", 4096),
         temperature=claude_cfg.get("temperature", 0.7),
-    )
-
-
-def _build_ollama_client(config: Dict[str, Any]) -> "LLMClient":
-    """Build an OllamaClient from the `llm.ollama:` block in config."""
-    from processors.ollama_client import OllamaClient
-
-    ollama_cfg = config.get("llm", {}).get("ollama", {})
-    return OllamaClient(
-        base_url=ollama_cfg.get("base_url", "http://localhost:11434"),
-        model=ollama_cfg.get("model", "gemma4:e4b"),
-        temperature=ollama_cfg.get("temperature", 0.7),
-        num_predict=ollama_cfg.get("num_predict", 4096),
-        timeout_seconds=ollama_cfg.get("timeout_seconds", 120),
-        prompt_profile=ollama_cfg.get("prompt_profile", "local"),
-    )
-
-
-def _build_hybrid_client(config: Dict[str, Any]) -> "LLMClient":
-    """Build a HybridLLMClient wrapping both backends."""
-    from processors.hybrid_llm_client import HybridLLMClient
-
-    claude = _build_claude_client(config)
-    ollama = _build_ollama_client(config)
-
-    llm_cfg = config.get("llm", {})
-    return HybridLLMClient(
-        ollama=ollama,
-        claude=claude,
-        routing_config=llm_cfg.get("routing", {}),
-        validation_mode=(
-            llm_cfg.get("ollama", {}).get("verbatim_validation", "strict")
-        ),
-        local_retry_count=int(
-            llm_cfg.get("ollama", {}).get("retry_on_validation_fail", 1)
-        ),
-        fallback_to_claude=bool(llm_cfg.get("fallback_to_claude", True)),
     )
