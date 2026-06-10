@@ -1,236 +1,122 @@
-# Kani-miso - Automation Setup Guide
+# Kani-miso — Setup Guide (Linux)
 
-This guide will help you set up the automation system for processing Telegram captures.
+Setting up the engine on a Linux machine (reference host: Bentendo). The engine
+repo and the Obsidian vault are separate: clone the repo anywhere; the vault path
+is configured, not assumed.
 
 ## Prerequisites
 
-- **Python 3.11+** installed
-- **Git** installed and configured
-- **Anthropic API key** (for Claude)
-- **Telegram Bot Token** (optional for Phase 2)
+- Python 3.11+
+- Git
+- An Anthropic API key (https://console.anthropic.com/ → Settings → API Keys)
+- A Telegram bot (optional, for mobile capture)
 
----
-
-## Phase 1: Setup Foundation (Manual Processing)
-
-### Step 1: Install Python Dependencies
+## 1. Install
 
 ```bash
-cd "C:\Users\gilli\Desktop\Connor Work\Github\Kani-miso"
+git clone <repo-url> && cd Kani-miso
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Step 2: Configure Environment Variables
+## 2. Configure
 
-1. Copy the example environment file:
-   ```bash
-   copy config\.env.example config\.env
-   ```
-
-2. Edit `config/.env` and add your API keys:
-   ```bash
-   ANTHROPIC_API_KEY=your_key_here
-   ```
-
-#### Getting an Anthropic API Key
-
-1. Go to https://console.anthropic.com/
-2. Sign up or log in
-3. Navigate to Settings → API Keys
-4. Create a new key
-5. Copy it to `config/.env`
-
-**Note:** Claude API is pay-as-you-go. Typical costs: ~$0.003 per note processed.
-
-### Step 3: Verify Setup
-
-Test that everything works:
+**Secrets** — copy the template and fill it in:
 
 ```bash
-python scripts/processor.py --stats
+cp config/.env.example config/.env
 ```
 
-You should see:
-```
-Queue Statistics
-================
-Pending: 0
-Total: 0
+```ini
+ANTHROPIC_API_KEY=sk-ant-...
+TELEGRAM_BOT_TOKEN=...        # from @BotFather (step 4)
+TELEGRAM_CHAT_ID=...          # your chat ID — REQUIRED; the bot must never run open
 ```
 
----
+**Vault path** — edit `config/config.yaml`:
 
-## Phase 1 Usage: Manual Capture Processing
-
-### Adding Captures Manually
-
-Until the Telegram bot is set up, you can add captures to the queue manually:
-
-**Interactive mode:**
-```bash
-python scripts/test_add_capture.py
+```yaml
+notes_root: "/home/<you>/path/to/vault"   # your Obsidian vault; never commit a personal path
 ```
 
-**Quick mode:**
-```bash
-python scripts/test_add_capture.py "This is a quick thought"
-```
-
-### Processing Captures
-
-Once you've added captures to the queue:
+## 3. Verify
 
 ```bash
+python scripts/check_setup.py
+python scripts/processor.py --stats     # queue reachable, config parses
+```
+
+Smoke-test the pipeline end to end:
+
+```bash
+python scripts/test_add_capture.py "Setup smoke test"
 python scripts/processor.py
+# then inspect the new file under <vault>/notes/ and review the commit
 ```
 
-This will:
-1. Fetch pending captures from the queue
-2. Process each with Claude API
-3. Generate markdown files in appropriate folders
-4. Create a Git commit (but NOT push)
-5. Mark captures as completed
+## 4. Telegram bot (mobile capture)
 
-### Review and Push
-
-After processing:
-
-1. Review the created files in `/notes`, `/reflections`, or `/sources`
-2. Check the Git commit:
-   ```bash
-   git log -1
-   git show
-   ```
-3. If satisfied, push manually:
-   ```bash
-   git push
-   ```
-
----
-
-## Phase 2: Telegram Bot Setup (Future)
-
-### Prerequisites
-
-- Telegram account
-- Bot created via @BotFather
-
-### Steps
-
-1. **Create Telegram Bot:**
-   - Open Telegram and message @BotFather
-   - Send `/newbot`
-   - Follow prompts to name your bot
-   - Copy the bot token
-
-2. **Get Your Chat ID:**
-   - Message your new bot
-   - Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
-   - Find your `chat.id` in the JSON response
-
-3. **Configure `.env`:**
-   ```bash
-   TELEGRAM_BOT_TOKEN=your_bot_token
-   TELEGRAM_CHAT_ID=your_chat_id
-   ```
-
-4. **Run Telegram Bot:**
-   ```bash
-   python scripts/telegram_bot.py
-   ```
-
-   (Bot script to be created in next phase)
-
----
-
-## Common Tasks
-
-### View Queue Status
+1. In Telegram, message **@BotFather** → `/newbot` → copy the token into
+   `config/.env`.
+2. Send any message to your new bot, then visit
+   `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy
+   `message.chat.id` into `TELEGRAM_CHAT_ID`.
+3. Run the bot + processor loop:
 
 ```bash
-python scripts/processor.py --stats
+python scripts/run.py                # bot + auto-process every 5 min
+python scripts/run.py --interval 10  # or every 10 min
+python scripts/telegram_bot.py       # bot only; process separately
 ```
 
-### Process Limited Batch
+Message conventions (all optional): see `specs/02-capture.md`.
+
+## 5. X / Twitter archive import (primary capture source)
+
+Request your archive at https://twitter.com/settings/download_your_data, extract
+the zip, then:
 
 ```bash
+python scripts/twitter_archive_processor.py /path/to/twitter-archive --year 2025
+python scripts/processor.py          # process the queued tweets in batches
+```
+
+Useful flags: `--from YYYY-MM-DD --to YYYY-MM-DD`, plus `--stats` on the processor.
+
+## 6. Snapshot analysis
+
+See `specs/04-analysis.md`. Run the cost estimate first; outputs land in
+`<vault>/analysis/<run-id>/`.
+
+## Common tasks
+
+```bash
+python scripts/processor.py --stats        # queue status
 python scripts/processor.py --batch-size 10
-```
-
-### View Logs
-
-```bash
+python scripts/reset_failed.py             # requeue failed captures
 tail -f logs/processor.log
 ```
 
-Or on Windows:
-```bash
-type logs\processor.log
-```
-
-### Reset Stuck Processing Items
-
-If the processor crashed, some items might be stuck in "processing" status.
-Next run will automatically reset them to "pending".
-
----
-
 ## Troubleshooting
 
-### "No module named 'anthropic'"
+- **`No module named anthropic`** — activate the venv, reinstall requirements.
+- **`ANTHROPIC_API_KEY not found`** — key goes in `config/.env`, not the shell;
+  no extra spaces.
+- **Bot logs "Listening to ALL chats"** — `TELEGRAM_CHAT_ID` is unset. Stop and
+  set it; the bot must never run unrestricted (see `specs/05-ai-and-ops.md`).
+- **Processing fails with API error** — check key validity and account credit;
+  failed captures stay queued and are retryable.
+- **Stuck `processing` items** — the processor resets them on next startup.
 
-Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+## Security notes
 
-### "ANTHROPIC_API_KEY not found"
+- Never commit `config/.env` (gitignored) or a personal `notes_root` path.
+- The queue DB (`queue/`) and logs (`logs/`) are local state, gitignored; logs
+  may contain capture content — keep them private.
 
-1. Ensure `config/.env` exists (copy from `config/.env.example`)
-2. Add your actual API key to the file
-3. Make sure there are no extra spaces
+## Daily rhythm
 
-### "Not a valid Git repository"
-
-Make sure you're running commands from the repository root:
-```bash
-cd "C:\Users\gilli\Desktop\Connor Work\Github\Kani-miso"
-```
-
-### Processing Fails with API Error
-
-Check:
-1. API key is correct in `config/.env`
-2. You have available API credits
-3. Internet connection is working
-
----
-
-## Configuration
-
-Edit `config/config.yaml` to customize:
-
-- **Batch size:** How many captures to process at once
-- **Claude model:** Trade off cost vs quality
-- **Auto-commit:** Whether to create Git commits automatically
-- **Logging level:** DEBUG for more detail, ERROR for less
-
----
-
-## Next Steps
-
-Once Phase 1 is working:
-
-1. Set up Telegram bot for automatic capture
-2. Add scheduled processing (runs automatically when PC boots)
-3. Enhance with source document processing (PDFs)
-4. Add hub suggestion improvements
-
----
-
-## Security Notes
-
-- **Never commit `config/.env`** - it's gitignored for security
-- Keep your API keys secret
-- The queue database (`queue/captures.db`) is local and gitignored
-- Logs may contain capture content - keep them private
+1. Capture via Telegram / import an X archive batch.
+2. `python scripts/processor.py` (or let `run.py` do it).
+3. Review the commit(s), then push manually when satisfied. Nothing pushes
+   automatically.
