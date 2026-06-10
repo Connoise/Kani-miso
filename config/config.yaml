@@ -3,10 +3,11 @@
 # Put secrets in config/.env (gitignored)
 
 # Notes Storage Configuration
-# Set notes_root to a different directory to store notes separately from the GitHub repo
-# Example: "C:/Users/YourName/Documents/KaniMisoNotes"
-# Leave as "." to use the repository root (default behavior)
-notes_root: "C:/Users/gilli/Desktop/Connor Work/Obsidian Notes"
+# The repo is the engine; the catalog lives in a separate Obsidian vault.
+# Set notes_root to the ABSOLUTE path of your vault on this machine
+# (e.g. "/home/connor/vault"). Do not commit personal paths.
+# "." (repo root) is a fallback for testing only.
+notes_root: "."
 
 telegram:
   enabled: true
@@ -25,38 +26,12 @@ processing:
   auto_commit: true  # Create git commits automatically
   auto_push: false  # Require manual review before push
 
+# LLM backend: Claude only (local Ollama/hybrid routing removed in Phase 0)
 claude:
   model: "claude-opus-4-5-20251101"  # Claude Opus 4.5 - Highest quality, best reasoning
   max_tokens: 4096
   temperature: 0.7  # Slightly creative but consistent
   # Alternative: claude-sonnet-4-5-20250929 for faster/cheaper (still excellent)
-
-# LLM backend selection
-# primary: hybrid (default) routes cheap captures to local Ollama and
-# nuance-critical captures (Reflection, Source, PDF) to Claude. Set to
-# "claude" to disable local processing entirely, or "ollama" to go local-only.
-llm:
-  primary: hybrid                   # hybrid | claude | ollama
-  fallback_to_claude: true          # auto-fallback to Claude on local failure
-
-  # Per-branch routing overrides. Valid values: local | claude | local_with_fallback
-  routing:
-    pdf: claude
-    source: claude
-    reflection: claude
-    images: local_with_fallback
-    default: local
-
-  ollama:
-    enabled: true
-    base_url: "http://localhost:11434"
-    model: "gemma4:e4b"
-    temperature: 0.7
-    num_predict: 4096               # equivalent of max_tokens
-    timeout_seconds: 120
-    prompt_profile: "local"         # specs/prompts/<profile>/
-    verbatim_validation: strict     # strict | lenient | off
-    retry_on_validation_fail: 1     # local retries before falling back to Claude
 
 git:
   commit_prefix: "process"  # Commit message prefix

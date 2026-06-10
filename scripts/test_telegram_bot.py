@@ -32,7 +32,7 @@ def main():
         print("2. Copy the bot token")
         print("3. Add to config/.env:")
         print("   TELEGRAM_BOT_TOKEN=your_token_here")
-        print("\nSee TELEGRAM_SETUP.md for detailed instructions")
+        print("\nSee SETUP.md for detailed instructions")
         return False
 
     if bot_token == "your_bot_token_here":
@@ -79,7 +79,7 @@ def main():
     print("2. Send a test message to your bot on Telegram")
     print("3. Check that bot confirms with ✅")
     print("4. Run: python scripts/processor.py")
-    print("\nSee TELEGRAM_SETUP.md for detailed guide")
+    print("\nSee SETUP.md for detailed guide")
     print("=" * 60 + "\n")
 
     return True

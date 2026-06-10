@@ -601,7 +601,7 @@ def main():
     if not bot_token:
         logger.error("TELEGRAM_BOT_TOKEN not found in config/.env")
         logger.error("Please set your bot token from @BotFather")
-        logger.error("See TELEGRAM_SETUP.md for instructions")
+        logger.error("See SETUP.md for instructions")
         sys.exit(1)
 
     if bot_token == "your_bot_token_here":

@@ -127,8 +127,7 @@ class ClaudeClient(LLMClient):
         """
         lines = [
             "Process the following Telegram capture using",
-            "claude-master-prompt.md and",
-            "telegram-processing-prompt.md",
+            "the instructions above",
             "output markdown only",
             "do not write files yet",
             "",
@@ -313,7 +312,7 @@ When processing captures with images:
         """
         lines = [
             "Process this Telegram capture that includes images.",
-            "Use claude-master-prompt.md and telegram-processing-prompt.md",
+            "Use the instructions above.",
             "Output markdown only. Do not write files yet.",
             "",
             f"Number of images: {len(image_paths)}",
