@@ -31,9 +31,11 @@ Optional, low-friction. Unformatted messages are valid (`type` defaults to
 `thought`, `capture_mode` to `quick`, `surface` to `mobile`).
 
 - First-line prefix sets type: `Thought:` `Reflection:` `Question:` `Source:`
-  `Quote:` `Log:`
+  `Quote:` `Idea:` `Log:` (no prefix → `Thought`)
 - Optional context keys on their own lines: `Mood:` `Energy:` `Trigger:`
-  `Context:` `Surface:`
+  `Context:` `Surface:` `Confidence:`
+- A `Hubs: [[A]], [[B]]` line is **not** parsed by the bot; it stays in the
+  body and is visible to Claude as a hub hint during processing.
 - Link capture: `Source: <label>` then the URL on its own line, then optionally
   why it was saved. The web fetcher retrieves and converts the page.
 - Attachments (images, PDFs): send with a one-line intent; the attachment and text
