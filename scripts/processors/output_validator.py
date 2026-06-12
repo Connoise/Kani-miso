@@ -173,7 +173,7 @@ def _check_corruption(
 _VERBATIM_SECTIONS = {
     "telegram": ["## Raw Capture"],
     "image": ["## Raw Capture"],
-    "source": ["## Why This Was Captured", "## Key Content", "## Raw Capture"],
+    "source": ["## Why This Was Captured", "## Page Content", "## Raw Capture"],
     "pdf": ["## Why This Was Captured", "## Extracted PDF Text", "## Raw Capture"],
 }
 

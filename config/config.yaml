@@ -50,6 +50,14 @@ folders:
   tweets: "tweets"
   images: "images"  # Date-organized image storage (images/YYYY/MM/DD/)
 
+# Link capture: preserve webpages as offline snapshots + cataloged notes
+# (specs/02-capture.md, project-review/06-link-capture-design.md)
+link_capture:
+  snapshot: monolith            # monolith | none (monolith is an optional binary)
+  snapshot_timeout_seconds: 60
+  max_snapshot_mb: 25
+  note_content_word_cap: 2000   # Page Content head in the note; full text in extracted.md
+
 images:
   enabled: true
   # Images are stored in date-based folders: images/YYYY/MM/DD/image-001.jpg

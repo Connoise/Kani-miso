@@ -4,7 +4,7 @@ Handles Git operations (add, commit, push) safely.
 """
 
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 import git
 from datetime import datetime
 

@@ -425,8 +425,9 @@ When processing captures with images:
 
         lines = [
             "Process the following webpage source for the archive.",
-            "Use source-processing-prompt.md to format the output.",
-            "Output markdown only.",
+            "Use the instructions above to format the output.",
+            "Output markdown only. Do not transcribe the page body — the",
+            "pipeline injects preserved page content separately.",
             "",
             "## Source URL",
             web_content.get('url', 'Unknown'),

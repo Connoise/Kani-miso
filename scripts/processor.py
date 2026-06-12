@@ -22,6 +22,8 @@ from processors.file_writer import FileWriter
 from processors.git_manager import GitManager
 from processors.web_fetcher import WebFetcher
 from processors.pdf_processor import PDFProcessor
+from processors.snapshotter import Snapshotter, head_by_words
+from utils.slugify import create_slug
 from utils.logger import setup_logger
 
 # Load environment variables
@@ -110,6 +112,11 @@ class Processor:
 
         # Web fetcher for source captures
         self.web_fetcher = WebFetcher()
+
+        # Page snapshotter for link captures (preservation artifacts)
+        self.snapshotter = Snapshotter(
+            self.notes_root, self.config.get('link_capture'),
+        )
 
         # PDF processor for document captures
         self.pdf_processor = PDFProcessor()
@@ -324,8 +331,7 @@ class Processor:
 
             if web_content['success']:
                 logger.info(f"Successfully fetched webpage: {web_content['metadata'].get('title', 'Unknown')}")
-                # Process with source-specific prompt
-                return self.llm.process_source_capture(capture, web_content, specs_dir)
+                return self._build_link_note(capture, web_content, specs_dir)
             else:
                 # Webpage fetch failed - log error and fall back to basic processing
                 logger.warning(f"Failed to fetch webpage: {web_content['error']}")
@@ -354,6 +360,82 @@ class Processor:
             }
             # Fall back to telegram processing for non-URL sources
             return self.llm.process_telegram_capture(capture, specs_dir)
+
+    def _build_link_note(
+        self,
+        capture: Dict[str, Any],
+        web_content: Dict[str, Any],
+        specs_dir: Path,
+    ) -> str:
+        """
+        Build a link-capture note: preserve the page (raw HTML + full text
+        extraction + optional offline snapshot), then assemble the catalog
+        note with a pipeline-injected Page Content head. The LLM produces only
+        the frontmatter/summary/themes shell — it never transcribes the page
+        (specs/02-capture.md, link-capture design).
+        """
+        final_url = web_content.get('final_url') or web_content.get('url', '')
+        extracted = web_content.get('markdown_content', '') or ''
+        raw_html = web_content.get('html', '') or ''
+        metadata = web_content.get('metadata', {})
+
+        # Filename stem the note will get, so the snapshot folder matches it
+        title = metadata.get('title') or final_url
+        stem = f"{capture.get('captured_at', '')[:10]}--{create_slug(title, max_length=50)}"
+
+        # Layer A: preservation artifacts (never fails the capture)
+        try:
+            snapshot = self.snapshotter.snapshot(final_url, raw_html, extracted, stem)
+        except Exception as e:
+            logger.warning(f"Snapshot failed for {final_url}: {e}")
+            snapshot = {"folder": None, "raw_html": None,
+                        "extracted": None, "offline_html": None}
+
+        # The LLM writes only the shell (summary/themes); pass it the extracted
+        # text as context but instruct it not to reproduce the body.
+        shell = self.llm.process_source_capture(capture, web_content, specs_dir)
+
+        # Layer B: inject the preserved Page Content deterministically
+        word_cap = int(self.config.get('link_capture', {}).get('note_content_word_cap', 2000))
+        head, truncated = head_by_words(extracted, word_cap) if extracted else ("", False)
+        section = self._render_page_content_section(snapshot, head, truncated)
+
+        return self._insert_section_before_end(shell, section)
+
+    @staticmethod
+    def _render_page_content_section(
+        snapshot: Dict[str, Any], head: str, truncated: bool,
+    ) -> str:
+        """Render the injected '## Page Content' + snapshot links."""
+        lines = ["## Page Content", ""]
+        if snapshot.get("folder"):
+            links = [f"- Saved snapshot: `{snapshot['folder']}/`"]
+            if snapshot.get("offline_html"):
+                links.append(f"- Offline copy: [[{snapshot['offline_html']}]]")
+            if snapshot.get("extracted"):
+                links.append(f"- Full extracted text: [[{snapshot['extracted']}]]")
+            lines += links + [""]
+        if head:
+            lines.append(head)
+            if truncated and snapshot.get("extracted"):
+                lines += ["", f"*Truncated — full text in [[{snapshot['extracted']}]].*"]
+        elif not snapshot.get("folder"):
+            lines.append("*Page content could not be preserved.*")
+        return "\n".join(lines).rstrip() + "\n"
+
+    @staticmethod
+    def _insert_section_before_end(note: str, section: str) -> str:
+        """
+        Insert `section` near the end of the note. If the note ends with a
+        trailing '---' horizontal rule (the source template does), insert
+        before it; otherwise append.
+        """
+        stripped = note.rstrip()
+        lines = stripped.split("\n")
+        if lines and lines[-1].strip() == "---":
+            body = "\n".join(lines[:-1]).rstrip()
+            return f"{body}\n\n{section}\n---\n"
+        return f"{stripped}\n\n{section}"
 
     def _process_document_capture(
         self,

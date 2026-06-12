@@ -28,7 +28,6 @@ You will receive:
 You MUST:
 - Preserve the original URL prominently
 - Include all available metadata (title, author, date, site)
-- Preserve key content from the source
 - Add a brief summary of what the source is about
 - Note any user-provided context about why this was captured
 - Suggest themes and hub connections
@@ -36,8 +35,10 @@ You MUST:
 You MUST NOT:
 - Editorialize or critique the source content
 - Add opinions not present in user context
-- Truncate significant content without noting it
 - Change the meaning of quoted passages
+- Reproduce or transcribe the page body yourself — the pipeline injects the
+  preserved page content from a separate extraction step. Do NOT add a
+  "Page Content" or "Key Content" section; end your output after "## Notes".
 
 ---
 
@@ -77,14 +78,6 @@ A 2-4 sentence summary of what this source is about and its main thesis or conte
 
 <User's context about why this source matters, or note that no context was provided>
 
-## Key Content
-
-<Significant excerpts or the full converted content, depending on length>
-
-### Notable Quotes
-
-> <Key quotes from the source, if any stand out>
-
 ## Themes
 
 - <Theme 1>
@@ -116,14 +109,12 @@ Determine source_type from:
 
 ## Content handling
 
-For LONG sources (>2000 words converted):
-- Include the full Summary section
-- Include Key Content with the most relevant sections
-- Note: "Full content preserved below" and include it after the main sections
-- Do not arbitrarily truncate
-
-For SHORT sources (<500 words):
-- Include the full content in Key Content section
+The page body is preserved and injected by the pipeline (raw HTML, a full
+text extraction, and an offline snapshot are saved to the vault separately).
+Your job is the catalog shell only: accurate frontmatter, a faithful Summary,
+the user's capture reason, themes, and hub suggestions. Do not paste the page
+text. Base your Summary on the extracted content you are given, but do not
+reproduce it.
 
 ---
 
