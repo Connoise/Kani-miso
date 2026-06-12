@@ -1,17 +1,20 @@
 """
 Output validator for LLM-generated capture notes.
 
-Enforces three things mechanically, since a small local model cannot be
-trusted to follow them from prompting alone:
+Runs on every capture before anything is written to the vault (wired into
+processor.py — no note reaches disk without passing). Enforces, mechanically:
 
 1. No stray code fences wrapping the note.
 2. Valid-looking YAML frontmatter beginning on line 1.
-3. The raw capture body appears verbatim inside the note's preservation
+3. No formatting corruption the model introduced (&nbsp; entities,
+   backslash-escaped markdown) — the January-2026 failure mode preserved in
+   tests/fixtures/corrupted-notes/.
+4. The raw capture body appears verbatim inside the note's preservation
    section ("## Raw Capture" for most captures, "## Key Content" or
    "## User Context" for source/PDF variants).
 
-The verbatim check is the most important one — CLAUDE.md treats raw-capture
-preservation as a non-negotiable rule.
+The verbatim check is the most important one — raw-capture preservation is
+the system's non-negotiable rule (specs/02-capture.md).
 """
 
 from __future__ import annotations
@@ -78,7 +81,12 @@ def validate_markdown_output(
     if not fm_ok:
         return _fail(cleaned, fm_reason, mode)
 
-    # 2. Verbatim check
+    # 2. Corruption check (entities / escaped markdown not present in input)
+    corr_ok, corr_reason = _check_corruption(cleaned, capture)
+    if not corr_ok:
+        return _fail(cleaned, corr_reason, mode)
+
+    # 3. Verbatim check
     verbatim_ok, verbatim_reason = _check_verbatim(cleaned, capture, capture_kind)
     if not verbatim_ok:
         return _fail(cleaned, verbatim_reason, mode)
@@ -122,6 +130,42 @@ def _check_frontmatter(markdown: str) -> tuple[bool, Optional[str]]:
         if lines[i].strip() == "---":
             return True, None
     return False, "no closing '---' within first 40 lines of output"
+
+
+# Corruption signatures: things a correct note never contains unless the
+# owner's own capture text contained them. Each output occurrence must be
+# matched by an input occurrence, otherwise the model (or some intermediate
+# step) mangled the formatting. These are exactly the artifacts found in the
+# January 2026 corrupted notes (tests/fixtures/corrupted-notes/).
+_CORRUPTION_PATTERNS = [
+    ("&nbsp;", re.compile(r"&nbsp;", re.IGNORECASE)),
+    ("escaped markdown (\\[ \\] \\_ \\* \\#)", re.compile(r"\\[\[\]_*#]")),
+]
+
+
+def _check_corruption(
+    markdown: str,
+    capture: Dict[str, Any],
+) -> tuple[bool, Optional[str]]:
+    """
+    Reject output containing corruption artifacts the input didn't have.
+
+    Counts are compared against the capture body so that a raw capture which
+    legitimately contains e.g. '&nbsp;' or backslash-escapes is still
+    preserved verbatim without tripping the check.
+    """
+    body = capture.get("body") or ""
+    for label, pattern in _CORRUPTION_PATTERNS:
+        out_count = len(pattern.findall(markdown))
+        if out_count == 0:
+            continue
+        in_count = len(pattern.findall(body))
+        if out_count > in_count:
+            return False, (
+                f"formatting corruption: {out_count} occurrence(s) of {label} "
+                f"in output vs {in_count} in capture body"
+            )
+    return True, None
 
 
 # Section headers checked for verbatim preservation per capture kind.

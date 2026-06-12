@@ -25,6 +25,9 @@ processing:
   batch_size: 500  # Max items to process in one run (increased for large tweet batches)
   auto_commit: true  # Create git commits automatically
   auto_push: false  # Require manual review before push
+  # Output validation before any note reaches the vault (specs/02-capture.md):
+  # strict = reject invalid output (capture stays queued) | lenient = warn only | off
+  output_validation: strict
 
 # LLM backend: Claude only (local Ollama/hybrid routing removed in Phase 0)
 claude:
@@ -38,8 +41,9 @@ git:
   branch_strategy: "main"  # Commit directly to main
 
 folders:
+  # Reflections are notes with type: reflection, not a separate folder
+  # (specs/01-data-model.md); legacy reflections/ content is still read.
   notes: "notes"
-  reflections: "reflections"
   sources: "sources"
   inbox: "inbox"
   hubs: "hubs"

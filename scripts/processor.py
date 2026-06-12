@@ -17,6 +17,7 @@ sys.path.append(str(Path(__file__).parent))
 
 from queue_manager import QueueManager
 from processors.llm_client import build_llm_client
+from processors.output_validator import validate_markdown_output
 from processors.file_writer import FileWriter
 from processors.git_manager import GitManager
 from processors.web_fetcher import WebFetcher
@@ -131,20 +132,28 @@ class Processor:
         if limit is None:
             limit = self.config['processing']['batch_size']
 
-        # Get pending captures
+        # Get pending captures, plus any notes a previous run wrote to the
+        # vault but never committed (crash between write and commit)
         captures = self.queue.get_pending(limit=limit)
+        recovered = self._recover_written_items()
 
-        if not captures:
+        if not captures and not recovered:
             logger.info("No pending captures to process")
             return {'processed': 0, 'failed': 0, 'files': []}
 
-        logger.info(f"Processing {len(captures)} captures...")
+        if captures:
+            logger.info(f"Processing {len(captures)} captures...")
 
         # Process each capture
         processed_files = []
+        written_ids = []
         note_type_counts = defaultdict(int)
         failed_count = 0
 
+        for item in recovered:
+            note_type_counts[item['type']] += 1
+
+        validation_mode = self.config.get('processing', {}).get('output_validation', 'strict')
         specs_dir = self.repo_root / self.config['paths']['specs_dir']
 
         for capture in captures:
@@ -171,9 +180,11 @@ class Processor:
                 # Process with Claude based on capture type
                 if document_paths:
                     # Document captures (PDFs) - extract text and process
+                    capture_kind = 'pdf'
                     markdown = self._process_document_capture(capture, document_paths, specs_dir)
                 elif image_paths:
                     logger.info(f"Processing capture {capture['id']} ({capture['type']}) with {len(image_paths)} images")
+                    capture_kind = 'image'
                     markdown = self.llm.process_capture_with_images(
                         capture,
                         image_paths,
@@ -182,10 +193,23 @@ class Processor:
                     )
                 elif capture['type'] == 'Source':
                     # Source captures - check for URL and fetch webpage
+                    capture_kind = 'source'
                     markdown = self._process_source_capture(capture, specs_dir)
                 else:
                     logger.info(f"Processing capture {capture['id']} ({capture['type']})")
+                    capture_kind = 'telegram'
                     markdown = self.llm.process_telegram_capture(capture, specs_dir)
+
+                # Validate before anything reaches the vault: frontmatter,
+                # corruption artifacts, verbatim raw-capture preservation
+                # (specs/02-capture.md). Failure marks the capture failed and
+                # leaves it requeueable; no file is written.
+                validation = validate_markdown_output(
+                    markdown, capture, mode=validation_mode, capture_kind=capture_kind,
+                )
+                if not validation.ok:
+                    raise ValueError(f"output validation failed: {validation.reason}")
+                markdown = validation.cleaned_markdown
 
                 # Write to file
                 file_path = self.file_writer.write_note(markdown, capture)
@@ -194,9 +218,13 @@ class Processor:
                 # Track note type
                 note_type_counts[capture['type']] += 1
 
-                # Mark as completed
                 relative_path = self.file_writer.get_relative_path(file_path)
-                self.queue.mark_completed(capture['id'], relative_path)
+                if self.git:
+                    # Atomic unit of work: 'done' only after the commit lands.
+                    self.queue.mark_written(capture['id'], relative_path)
+                    written_ids.append(capture['id'])
+                else:
+                    self.queue.mark_completed(capture['id'], relative_path)
 
             except Exception as e:
                 logger.error(f"Failed to process capture {capture['id']}: {e}")
@@ -205,10 +233,16 @@ class Processor:
 
         # Create Git commit if enabled
         commit_sha = None
-        if self.git and processed_files:
-            commit_sha = self.git.create_batch_commit(processed_files, dict(note_type_counts))
+        files_to_commit = [item['path'] for item in recovered] + processed_files
+        ids_to_complete = [item['id'] for item in recovered] + written_ids
+        if self.git and files_to_commit:
+            commit_sha = self.git.create_batch_commit(files_to_commit, dict(note_type_counts))
 
             if commit_sha:
+                # The unit of work is complete only now
+                for capture_id in ids_to_complete:
+                    self.queue.mark_completed(capture_id)
+
                 # Show commit summary
                 summary = self.git.get_commit_summary(commit_sha)
                 logger.info("\n" + summary)
@@ -217,11 +251,17 @@ class Processor:
                 if self.config['processing']['auto_push']:
                     logger.warning("Auto-push is enabled but configured for manual review")
                     logger.info("Run 'git push' manually to push commits after review")
+            else:
+                logger.error(
+                    f"Commit failed: {len(ids_to_complete)} notes remain status "
+                    f"'written' and will be committed by the next run"
+                )
 
         # Summary
         summary = {
             'processed': len(processed_files),
             'failed': failed_count,
+            'recovered': len(recovered),
             'files': [self.file_writer.get_relative_path(f) for f in processed_files],
             'commit_sha': commit_sha,
             'note_types': dict(note_type_counts),
@@ -234,6 +274,31 @@ class Processor:
         logger.info("=" * 60)
 
         return summary
+
+    def _recover_written_items(self) -> List[Dict[str, Any]]:
+        """
+        Find notes a previous run wrote to the vault but never committed
+        (status 'written': the run died between file write and git commit).
+
+        Items whose file still exists are returned as
+        {'id', 'type', 'path'} for inclusion in this batch's commit; items
+        whose file vanished are reset to pending for reprocessing.
+        """
+        items = []
+        for row in self.queue.get_by_status('written'):
+            output_file = row.get('output_file')
+            path = (self.notes_root / output_file) if output_file else None
+            if path and path.exists():
+                items.append({'id': row['id'], 'type': row['type'], 'path': path})
+            else:
+                self.queue.reset_to_pending(row['id'])
+
+        if items:
+            logger.warning(
+                f"Recovered {len(items)} written-but-uncommitted note(s) from a "
+                f"previous run; including them in this batch's commit"
+            )
+        return items
 
     def _process_source_capture(self, capture: Dict[str, Any], specs_dir: Path) -> str:
         """

@@ -31,3 +31,6 @@ pypdf==4.0.1
 # Web fetching and HTML processing (for webpage sources)
 beautifulsoup4==4.12.3
 html2text==2024.2.26
+
+# Development / testing
+pytest==9.0.3

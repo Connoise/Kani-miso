@@ -14,9 +14,22 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+# Queue-time guard: a single capture larger than this is almost certainly a
+# mistake (Telegram caps messages at ~4k chars; tweets are tiny). Rejecting at
+# enqueue keeps the DB and the LLM context sane.
+MAX_BODY_CHARS = 100_000
+
 
 class QueueManager:
-    """Manages the capture queue using SQLite."""
+    """Manages the capture queue using SQLite.
+
+    Capture statuses:
+        pending    → queued, not yet processed
+        processing → picked up by a processor run (reset to pending on crash)
+        written    → note file written to the vault but not yet git-committed
+        done       → file written and committed
+        failed     → processing or validation failed (requeue via reset_failed)
+    """
 
     def __init__(self, db_path: str = "queue/captures.db"):
         """
@@ -103,6 +116,18 @@ class QueueManager:
             conn.execute("ALTER TABLE captures ADD COLUMN document_paths TEXT")
             conn.commit()
 
+        if 'tweet_id' not in columns:
+            logger.info("Migrating database: adding tweet_id column to captures table")
+            conn.execute("ALTER TABLE captures ADD COLUMN tweet_id TEXT")
+            conn.commit()
+
+        # Dedup guard for archive re-imports: one queue row per tweet, ever.
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_captures_tweet_id
+            ON captures(tweet_id) WHERE tweet_id IS NOT NULL
+        """)
+        conn.commit()
+
     @contextmanager
     def _get_connection(self):
         """Context manager for database connections."""
@@ -126,6 +151,7 @@ class QueueManager:
         trigger: Optional[str] = None,
         context: Optional[str] = None,
         attachments: Optional[List[Dict]] = None,
+        tweet_id: Optional[str] = None,
     ) -> int:
         """
         Add a new capture to the queue.
@@ -145,15 +171,26 @@ class QueueManager:
 
         Returns:
             Database ID of the new capture
+
+        Raises:
+            ValueError: If the body is empty or exceeds MAX_BODY_CHARS.
         """
+        if not body or not body.strip():
+            raise ValueError("Capture body is empty — nothing to queue")
+        if len(body) > MAX_BODY_CHARS:
+            raise ValueError(
+                f"Capture body is {len(body)} chars, exceeding the "
+                f"{MAX_BODY_CHARS}-char queue limit"
+            )
+
         with self._get_connection() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO captures (
                     telegram_message_id, captured_at, type, surface,
                     mood, energy, confidence, trigger, context,
-                    body, attachments
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    body, attachments, tweet_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     telegram_message_id,
@@ -167,12 +204,22 @@ class QueueManager:
                     context,
                     body,
                     json.dumps(attachments) if attachments else None,
+                    tweet_id,
                 ),
             )
             conn.commit()
             capture_id = cursor.lastrowid
             logger.info(f"Added capture {capture_id} to queue (type: {type})")
             return capture_id
+
+    def has_tweet(self, tweet_id: str) -> bool:
+        """Return True if a tweet with this ID was ever queued (any status)."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT 1 FROM captures WHERE tweet_id = ? LIMIT 1",
+                (str(tweet_id),),
+            )
+            return cursor.fetchone() is not None
 
     def get_pending(self, limit: int = None) -> List[Dict[str, Any]]:
         """
@@ -227,13 +274,36 @@ class QueueManager:
             conn.commit()
         logger.debug(f"Marked capture {capture_id} as processing")
 
-    def mark_completed(self, capture_id: int, output_file: str):
+    def mark_written(self, capture_id: int, output_file: str):
         """
-        Mark a capture as successfully processed.
+        Mark a capture's note as written to the vault (but not yet committed).
+
+        Part of the atomic unit of work: write → 'written' → git commit →
+        'done'. If the process dies between write and commit, the next run
+        recovers 'written' items instead of reprocessing (which would create
+        duplicate notes).
+        """
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE captures SET
+                    status = 'written',
+                    output_file = ?
+                WHERE id = ?
+                """,
+                (output_file, capture_id),
+            )
+            conn.commit()
+        logger.debug(f"Capture {capture_id} written → {output_file}")
+
+    def mark_completed(self, capture_id: int, output_file: Optional[str] = None):
+        """
+        Mark a capture as fully processed (file written and committed).
 
         Args:
             capture_id: Database ID of the capture
-            output_file: Path to the created markdown file
+            output_file: Path to the created markdown file. If None, the
+                value already stored (by mark_written) is kept.
         """
         with self._get_connection() as conn:
             conn.execute(
@@ -241,13 +311,32 @@ class QueueManager:
                 UPDATE captures SET
                     status = 'done',
                     processed_at = ?,
-                    output_file = ?
+                    output_file = COALESCE(?, output_file)
                 WHERE id = ?
                 """,
                 (datetime.now().isoformat(), output_file, capture_id),
             )
             conn.commit()
-        logger.info(f"Completed capture {capture_id} → {output_file}")
+        logger.info(f"Completed capture {capture_id}")
+
+    def get_by_status(self, status: str) -> List[Dict[str, Any]]:
+        """Return all captures with the given status."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM captures WHERE status = ? ORDER BY id",
+                (status,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def reset_to_pending(self, capture_id: int):
+        """Reset a single capture to 'pending' (e.g. written file went missing)."""
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE captures SET status = 'pending', output_file = NULL WHERE id = ?",
+                (capture_id,),
+            )
+            conn.commit()
+        logger.warning(f"Reset capture {capture_id} to pending")
 
     def mark_failed(self, capture_id: int, error_message: str):
         """
