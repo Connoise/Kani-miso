@@ -205,11 +205,13 @@ class QueueManager:
                 END,
                 captured_at ASC
         """
+        params: tuple = ()
         if limit:
-            query += f" LIMIT {limit}"
+            query += " LIMIT ?"
+            params = (int(limit),)
 
         with self._get_connection() as conn:
-            cursor = conn.execute(query)
+            cursor = conn.execute(query, params)
             captures = [dict(row) for row in cursor.fetchall()]
 
         logger.info(f"Retrieved {len(captures)} pending captures (prioritized: Telegram/images first, tweets last)")
