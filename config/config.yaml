@@ -31,10 +31,11 @@ processing:
 
 # LLM backend: Claude only (local Ollama/hybrid routing removed in Phase 0)
 claude:
-  model: "claude-opus-4-5-20251101"  # Claude Opus 4.5 - Highest quality, best reasoning
+  model: "claude-opus-4-8"  # Current Opus - highest quality, best reasoning
   max_tokens: 4096
-  temperature: 0.7  # Slightly creative but consistent
-  # Alternative: claude-sonnet-4-5-20250929 for faster/cheaper (still excellent)
+  # No temperature: current models reject sampling params and use adaptive
+  # thinking instead (set automatically by the client).
+  # Alternative: claude-sonnet-4-6 for faster/cheaper (still excellent)
 
 git:
   commit_prefix: "process"  # Commit message prefix

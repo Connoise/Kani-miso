@@ -12,6 +12,7 @@ from typing import Dict, Any, Optional, List
 
 import anthropic
 
+from ..config import MODEL_SONNET
 from .models import PersonalBackground, ALL_FIELD_SECTIONS
 from .analysis_reader import AnalysisDocument
 
@@ -208,7 +209,7 @@ class BackgroundCondenser:
 
         try:
             response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=MODEL_SONNET,
                 max_tokens=8000,
                 messages=[{
                     "role": "user",

@@ -1,14 +1,10 @@
 """
 Configuration for personal analysis.
 
-ASSUMPTION: User is psychologically healthy and stable
-ASSUMPTION: User genuinely wants honest analysis
-ASSUMPTION: User will use insights constructively
-ASSUMPTION: User can handle critical feedback
-ASSUMPTION: User poses no risk to self or others
-
-These assumptions are documented in PLAN.md and must be
-accepted by the user before running analysis.
+Tone and scope are governed by specs/04-analysis.md: candid, uncensored,
+evidence-cited, confidence-marked, and framed as a dated snapshot rather than
+a verdict. The owner runs this on their own corpus by choice; see
+specs/00-purpose.md for who reads the output.
 """
 
 from dataclasses import dataclass, field
@@ -17,18 +13,19 @@ from typing import Optional, List, Set
 from datetime import datetime
 
 
-# Pricing constants (as of 2026-01)
-CLAUDE_OPUS_INPUT_PRICE_PER_1M = 15.00  # USD per 1M input tokens
-CLAUDE_OPUS_OUTPUT_PRICE_PER_1M = 75.00  # USD per 1M output tokens
-CLAUDE_OPUS_CACHED_INPUT_PRICE_PER_1M = 1.50  # USD per 1M cached input tokens
+# Pricing constants (USD per 1M tokens, as of 2026-06).
+# Cached input is ~0.1x base input. Keep in sync with current model pricing.
+CLAUDE_OPUS_INPUT_PRICE_PER_1M = 5.00
+CLAUDE_OPUS_OUTPUT_PRICE_PER_1M = 25.00
+CLAUDE_OPUS_CACHED_INPUT_PRICE_PER_1M = 0.50
 
-CLAUDE_SONNET_INPUT_PRICE_PER_1M = 3.00  # USD per 1M input tokens
-CLAUDE_SONNET_OUTPUT_PRICE_PER_1M = 15.00  # USD per 1M output tokens
-CLAUDE_SONNET_CACHED_INPUT_PRICE_PER_1M = 0.30  # USD per 1M cached input tokens
+CLAUDE_SONNET_INPUT_PRICE_PER_1M = 3.00
+CLAUDE_SONNET_OUTPUT_PRICE_PER_1M = 15.00
+CLAUDE_SONNET_CACHED_INPUT_PRICE_PER_1M = 0.30
 
-# Model identifiers
-MODEL_OPUS = "claude-opus-4-5-20251101"
-MODEL_SONNET = "claude-sonnet-4-20250514"
+# Model identifiers (current generation)
+MODEL_OPUS = "claude-opus-4-8"
+MODEL_SONNET = "claude-sonnet-4-6"
 
 # Default model tiers - which dimensions use which model
 # Tier 1 (Opus): Complex synthesis, deep psychological analysis
@@ -102,13 +99,16 @@ class AnalysisConfig:
     generate_synthesis: bool = True
 
     # Model settings
-    model: str = "claude-opus-4-5-20251101"  # Default/fallback model
-    thinking_budget: int = 10000
+    model: str = "claude-opus-4-8"  # Default/fallback model
+    # Reasoning depth for analysis calls. Current models use adaptive thinking +
+    # the effort parameter (the old fixed budget_tokens is removed); "high" is
+    # the recommended minimum for intelligence-sensitive work like this.
+    effort: str = "high"  # low | medium | high | xhigh | max
     max_output_tokens: int = 16000
 
     # Two-phase extraction (reduces token usage significantly)
     use_extraction_phase: bool = True  # If True, extract once then analyze extraction
-    extraction_model: str = "claude-opus-4-5-20251101"  # Model for extraction phase
+    extraction_model: str = "claude-opus-4-8"  # Model for extraction phase
     extraction_output_tokens: int = 25000  # Target extraction size per pass
 
     # Multi-pass extraction (analyze 100% of content)

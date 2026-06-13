@@ -26,9 +26,8 @@ class ClaudeClient(LLMClient):
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "claude-3-5-sonnet-20241022",
+        model: str = "claude-opus-4-8",
         max_tokens: int = 4096,
-        temperature: float = 0.7,
     ):
         """
         Initialize Claude API client.
@@ -37,7 +36,11 @@ class ClaudeClient(LLMClient):
             api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
             model: Claude model to use
             max_tokens: Maximum tokens in response
-            temperature: Response temperature (0-1)
+
+        Note: current models use adaptive thinking rather than a sampling
+        temperature (temperature/top_p are rejected), so capture calls pass
+        thinking={"type": "adaptive"} — this also keeps the model's reasoning
+        out of the visible note body.
         """
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         if not self.api_key:
@@ -49,7 +52,6 @@ class ClaudeClient(LLMClient):
         self.client = anthropic.Anthropic(api_key=self.api_key)
         self.model = model
         self.max_tokens = max_tokens
-        self.temperature = temperature
 
         logger.info(f"Initialized Claude client (model: {model})")
 
@@ -98,7 +100,7 @@ class ClaudeClient(LLMClient):
         response = self.client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
-            temperature=self.temperature,
+            thinking={"type": "adaptive"},
             system=system_prompt,
             messages=[
                 {"role": "user", "content": user_message}
@@ -276,7 +278,7 @@ When processing captures with images:
         response = self.client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
-            temperature=self.temperature,
+            thinking={"type": "adaptive"},
             system=system_prompt,
             messages=[
                 {"role": "user", "content": content}
@@ -389,7 +391,7 @@ When processing captures with images:
         response = self.client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
-            temperature=self.temperature,
+            thinking={"type": "adaptive"},
             system=system_prompt,
             messages=[
                 {"role": "user", "content": user_message}
@@ -526,7 +528,7 @@ When processing captures with images:
         response = self.client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
-            temperature=self.temperature,
+            thinking={"type": "adaptive"},
             system=system_prompt,
             messages=[
                 {"role": "user", "content": user_message}
