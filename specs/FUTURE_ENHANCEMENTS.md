@@ -129,12 +129,12 @@ quick:
   # For rapid capture
 
 deep:
-  model: claude-opus-4-5
+  model: claude-opus-4-8
   max_tokens: 4096
   # For important sources/reflections
 
 review:
-  model: claude-opus-4-5
+  model: claude-opus-4-8
   # For analyzing existing notes
 ```
 

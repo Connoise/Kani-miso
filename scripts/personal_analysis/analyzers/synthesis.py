@@ -118,7 +118,7 @@ Look for:
 7. **Projection patterns** - What they criticize that mirrors themselves
 8. **Compensations** - What behaviors mask what insecurities
 
-Be direct and clear. Do not soften. The person has explicitly requested unvarnished truth and is capable of receiving it constructively.
+Be direct and clear. State difficult findings plainly, grounded in the evidence — candor means following what the notes show, not softening it.
 
 For each hidden truth:
 - State it clearly

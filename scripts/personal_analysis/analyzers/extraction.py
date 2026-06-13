@@ -156,12 +156,14 @@ Structure your extraction using the categories from your instructions."""
             # Build messages
             messages = self._build_messages(content, images)
 
-            # Build API call kwargs
+            # Build API call kwargs (adaptive thinking + effort; see base.py)
             api_kwargs = {
                 "model": self.config.extraction_model,
                 "max_tokens": self.config.extraction_output_tokens,
                 "system": self.EXTRACTION_SYSTEM_PROMPT,
                 "messages": messages,
+                "thinking": {"type": "adaptive"},
+                "output_config": {"effort": self.config.effort},
             }
 
             # Use streaming for long operations (required by SDK for >10min requests)

@@ -17,10 +17,13 @@ sys.path.append(str(Path(__file__).parent))
 
 from queue_manager import QueueManager
 from processors.llm_client import build_llm_client
+from processors.output_validator import validate_markdown_output
 from processors.file_writer import FileWriter
 from processors.git_manager import GitManager
 from processors.web_fetcher import WebFetcher
 from processors.pdf_processor import PDFProcessor
+from processors.snapshotter import Snapshotter, head_by_words
+from utils.slugify import create_slug
 from utils.logger import setup_logger
 
 # Load environment variables
@@ -110,6 +113,11 @@ class Processor:
         # Web fetcher for source captures
         self.web_fetcher = WebFetcher()
 
+        # Page snapshotter for link captures (preservation artifacts)
+        self.snapshotter = Snapshotter(
+            self.notes_root, self.config.get('link_capture'),
+        )
+
         # PDF processor for document captures
         self.pdf_processor = PDFProcessor()
 
@@ -131,20 +139,28 @@ class Processor:
         if limit is None:
             limit = self.config['processing']['batch_size']
 
-        # Get pending captures
+        # Get pending captures, plus any notes a previous run wrote to the
+        # vault but never committed (crash between write and commit)
         captures = self.queue.get_pending(limit=limit)
+        recovered = self._recover_written_items()
 
-        if not captures:
+        if not captures and not recovered:
             logger.info("No pending captures to process")
             return {'processed': 0, 'failed': 0, 'files': []}
 
-        logger.info(f"Processing {len(captures)} captures...")
+        if captures:
+            logger.info(f"Processing {len(captures)} captures...")
 
         # Process each capture
         processed_files = []
+        written_ids = []
         note_type_counts = defaultdict(int)
         failed_count = 0
 
+        for item in recovered:
+            note_type_counts[item['type']] += 1
+
+        validation_mode = self.config.get('processing', {}).get('output_validation', 'strict')
         specs_dir = self.repo_root / self.config['paths']['specs_dir']
 
         for capture in captures:
@@ -171,9 +187,11 @@ class Processor:
                 # Process with Claude based on capture type
                 if document_paths:
                     # Document captures (PDFs) - extract text and process
+                    capture_kind = 'pdf'
                     markdown = self._process_document_capture(capture, document_paths, specs_dir)
                 elif image_paths:
                     logger.info(f"Processing capture {capture['id']} ({capture['type']}) with {len(image_paths)} images")
+                    capture_kind = 'image'
                     markdown = self.llm.process_capture_with_images(
                         capture,
                         image_paths,
@@ -182,10 +200,23 @@ class Processor:
                     )
                 elif capture['type'] == 'Source':
                     # Source captures - check for URL and fetch webpage
+                    capture_kind = 'source'
                     markdown = self._process_source_capture(capture, specs_dir)
                 else:
                     logger.info(f"Processing capture {capture['id']} ({capture['type']})")
+                    capture_kind = 'telegram'
                     markdown = self.llm.process_telegram_capture(capture, specs_dir)
+
+                # Validate before anything reaches the vault: frontmatter,
+                # corruption artifacts, verbatim raw-capture preservation
+                # (specs/02-capture.md). Failure marks the capture failed and
+                # leaves it requeueable; no file is written.
+                validation = validate_markdown_output(
+                    markdown, capture, mode=validation_mode, capture_kind=capture_kind,
+                )
+                if not validation.ok:
+                    raise ValueError(f"output validation failed: {validation.reason}")
+                markdown = validation.cleaned_markdown
 
                 # Write to file
                 file_path = self.file_writer.write_note(markdown, capture)
@@ -194,9 +225,13 @@ class Processor:
                 # Track note type
                 note_type_counts[capture['type']] += 1
 
-                # Mark as completed
                 relative_path = self.file_writer.get_relative_path(file_path)
-                self.queue.mark_completed(capture['id'], relative_path)
+                if self.git:
+                    # Atomic unit of work: 'done' only after the commit lands.
+                    self.queue.mark_written(capture['id'], relative_path)
+                    written_ids.append(capture['id'])
+                else:
+                    self.queue.mark_completed(capture['id'], relative_path)
 
             except Exception as e:
                 logger.error(f"Failed to process capture {capture['id']}: {e}")
@@ -205,10 +240,16 @@ class Processor:
 
         # Create Git commit if enabled
         commit_sha = None
-        if self.git and processed_files:
-            commit_sha = self.git.create_batch_commit(processed_files, dict(note_type_counts))
+        files_to_commit = [item['path'] for item in recovered] + processed_files
+        ids_to_complete = [item['id'] for item in recovered] + written_ids
+        if self.git and files_to_commit:
+            commit_sha = self.git.create_batch_commit(files_to_commit, dict(note_type_counts))
 
             if commit_sha:
+                # The unit of work is complete only now
+                for capture_id in ids_to_complete:
+                    self.queue.mark_completed(capture_id)
+
                 # Show commit summary
                 summary = self.git.get_commit_summary(commit_sha)
                 logger.info("\n" + summary)
@@ -217,11 +258,17 @@ class Processor:
                 if self.config['processing']['auto_push']:
                     logger.warning("Auto-push is enabled but configured for manual review")
                     logger.info("Run 'git push' manually to push commits after review")
+            else:
+                logger.error(
+                    f"Commit failed: {len(ids_to_complete)} notes remain status "
+                    f"'written' and will be committed by the next run"
+                )
 
         # Summary
         summary = {
             'processed': len(processed_files),
             'failed': failed_count,
+            'recovered': len(recovered),
             'files': [self.file_writer.get_relative_path(f) for f in processed_files],
             'commit_sha': commit_sha,
             'note_types': dict(note_type_counts),
@@ -234,6 +281,31 @@ class Processor:
         logger.info("=" * 60)
 
         return summary
+
+    def _recover_written_items(self) -> List[Dict[str, Any]]:
+        """
+        Find notes a previous run wrote to the vault but never committed
+        (status 'written': the run died between file write and git commit).
+
+        Items whose file still exists are returned as
+        {'id', 'type', 'path'} for inclusion in this batch's commit; items
+        whose file vanished are reset to pending for reprocessing.
+        """
+        items = []
+        for row in self.queue.get_by_status('written'):
+            output_file = row.get('output_file')
+            path = (self.notes_root / output_file) if output_file else None
+            if path and path.exists():
+                items.append({'id': row['id'], 'type': row['type'], 'path': path})
+            else:
+                self.queue.reset_to_pending(row['id'])
+
+        if items:
+            logger.warning(
+                f"Recovered {len(items)} written-but-uncommitted note(s) from a "
+                f"previous run; including them in this batch's commit"
+            )
+        return items
 
     def _process_source_capture(self, capture: Dict[str, Any], specs_dir: Path) -> str:
         """
@@ -259,8 +331,7 @@ class Processor:
 
             if web_content['success']:
                 logger.info(f"Successfully fetched webpage: {web_content['metadata'].get('title', 'Unknown')}")
-                # Process with source-specific prompt
-                return self.llm.process_source_capture(capture, web_content, specs_dir)
+                return self._build_link_note(capture, web_content, specs_dir)
             else:
                 # Webpage fetch failed - log error and fall back to basic processing
                 logger.warning(f"Failed to fetch webpage: {web_content['error']}")
@@ -289,6 +360,82 @@ class Processor:
             }
             # Fall back to telegram processing for non-URL sources
             return self.llm.process_telegram_capture(capture, specs_dir)
+
+    def _build_link_note(
+        self,
+        capture: Dict[str, Any],
+        web_content: Dict[str, Any],
+        specs_dir: Path,
+    ) -> str:
+        """
+        Build a link-capture note: preserve the page (raw HTML + full text
+        extraction + optional offline snapshot), then assemble the catalog
+        note with a pipeline-injected Page Content head. The LLM produces only
+        the frontmatter/summary/themes shell — it never transcribes the page
+        (specs/02-capture.md, link-capture design).
+        """
+        final_url = web_content.get('final_url') or web_content.get('url', '')
+        extracted = web_content.get('markdown_content', '') or ''
+        raw_html = web_content.get('html', '') or ''
+        metadata = web_content.get('metadata', {})
+
+        # Filename stem the note will get, so the snapshot folder matches it
+        title = metadata.get('title') or final_url
+        stem = f"{capture.get('captured_at', '')[:10]}--{create_slug(title, max_length=50)}"
+
+        # Layer A: preservation artifacts (never fails the capture)
+        try:
+            snapshot = self.snapshotter.snapshot(final_url, raw_html, extracted, stem)
+        except Exception as e:
+            logger.warning(f"Snapshot failed for {final_url}: {e}")
+            snapshot = {"folder": None, "raw_html": None,
+                        "extracted": None, "offline_html": None}
+
+        # The LLM writes only the shell (summary/themes); pass it the extracted
+        # text as context but instruct it not to reproduce the body.
+        shell = self.llm.process_source_capture(capture, web_content, specs_dir)
+
+        # Layer B: inject the preserved Page Content deterministically
+        word_cap = int(self.config.get('link_capture', {}).get('note_content_word_cap', 2000))
+        head, truncated = head_by_words(extracted, word_cap) if extracted else ("", False)
+        section = self._render_page_content_section(snapshot, head, truncated)
+
+        return self._insert_section_before_end(shell, section)
+
+    @staticmethod
+    def _render_page_content_section(
+        snapshot: Dict[str, Any], head: str, truncated: bool,
+    ) -> str:
+        """Render the injected '## Page Content' + snapshot links."""
+        lines = ["## Page Content", ""]
+        if snapshot.get("folder"):
+            links = [f"- Saved snapshot: `{snapshot['folder']}/`"]
+            if snapshot.get("offline_html"):
+                links.append(f"- Offline copy: [[{snapshot['offline_html']}]]")
+            if snapshot.get("extracted"):
+                links.append(f"- Full extracted text: [[{snapshot['extracted']}]]")
+            lines += links + [""]
+        if head:
+            lines.append(head)
+            if truncated and snapshot.get("extracted"):
+                lines += ["", f"*Truncated — full text in [[{snapshot['extracted']}]].*"]
+        elif not snapshot.get("folder"):
+            lines.append("*Page content could not be preserved.*")
+        return "\n".join(lines).rstrip() + "\n"
+
+    @staticmethod
+    def _insert_section_before_end(note: str, section: str) -> str:
+        """
+        Insert `section` near the end of the note. If the note ends with a
+        trailing '---' horizontal rule (the source template does), insert
+        before it; otherwise append.
+        """
+        stripped = note.rstrip()
+        lines = stripped.split("\n")
+        if lines and lines[-1].strip() == "---":
+            body = "\n".join(lines[:-1]).rstrip()
+            return f"{body}\n\n{section}\n---\n"
+        return f"{stripped}\n\n{section}"
 
     def _process_document_capture(
         self,

@@ -298,8 +298,8 @@ generated_at: {datetime.now().isoformat()}
 
 ## Analysis Approach
 
-This analysis was generated using Claude Opus 4.5 (claude-opus-4-5-20251101),
-Anthropic's most capable model, with extended thinking enabled for deeper reasoning.
+This analysis was generated using Claude Opus (the current Opus model),
+with adaptive thinking enabled for deeper reasoning.
 
 ### Core Principles
 

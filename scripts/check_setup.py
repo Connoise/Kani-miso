@@ -96,17 +96,20 @@ def main():
             anthropic_key and anthropic_key != "your_anthropic_api_key_here",
         )
 
-        check_item(
-            "TELEGRAM_BOT_TOKEN",
-            telegram_token and telegram_token != "your_bot_token_here",
-            required=False,
-        )
+        bot_configured = telegram_token and telegram_token != "your_bot_token_here"
+        chat_configured = telegram_chat and telegram_chat != "your_chat_id_here"
 
-        check_item(
-            "TELEGRAM_CHAT_ID",
-            telegram_chat and telegram_chat != "your_chat_id_here",
-            required=False,
-        )
+        check_item("TELEGRAM_BOT_TOKEN", bot_configured, required=False)
+
+        # The bot refuses to start without a chat allowlist, so once the token
+        # is set the chat ID becomes required (it serves only the owner).
+        if bot_configured:
+            all_good &= check_item(
+                "TELEGRAM_CHAT_ID (required: bot serves only this chat)",
+                chat_configured,
+            )
+        else:
+            check_item("TELEGRAM_CHAT_ID", chat_configured, required=False)
     else:
         all_good = False
 
@@ -123,6 +126,15 @@ def main():
             print(f"  {YELLOW}→{RESET} Repository has uncommitted changes")
     except:
         all_good &= check_item("Git repository initialized", False)
+
+    # Optional external tools
+    print("\nOptional Tools:")
+    import shutil
+    if shutil.which("monolith"):
+        check_item("monolith (offline page snapshots)", True)
+    else:
+        print(f"  {YELLOW}→{RESET} monolith not found — link captures still preserve "
+              f"raw HTML + extracted text; install for offline snapshots (see SETUP.md)")
 
     # Summary
     print("\n" + "=" * 60)

@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Set
 
 import anthropic
 
+from ..config import MODEL_SONNET
 from .models import CategorySummary, CATEGORY_DEFINITIONS, CategoryDef
 from .analysis_reader import AnalysisDocument
 
@@ -224,7 +225,7 @@ class CategoryCondenser:
 
         try:
             response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=MODEL_SONNET,
                 max_tokens=16000,  # No length limit, but reasonable max
                 messages=[{
                     "role": "user",

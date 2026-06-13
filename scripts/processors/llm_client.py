@@ -146,7 +146,6 @@ def build_llm_client(config: Dict[str, Any]) -> LLMClient:
 
     claude_cfg = config.get("claude", {})
     return ClaudeClient(
-        model=claude_cfg.get("model", "claude-opus-4-5-20251101"),
+        model=claude_cfg.get("model", "claude-opus-4-8"),
         max_tokens=claude_cfg.get("max_tokens", 4096),
-        temperature=claude_cfg.get("temperature", 0.7),
     )

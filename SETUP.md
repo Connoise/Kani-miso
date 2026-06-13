@@ -83,7 +83,23 @@ python scripts/processor.py          # process the queued tweets in batches
 
 Useful flags: `--from YYYY-MM-DD --to YYYY-MM-DD`, plus `--stats` on the processor.
 
-## 6. Snapshot analysis
+## 6. Link capture (optional: full-page snapshots)
+
+Capturing a `Source:` link always preserves the raw HTML and a full text
+extraction in `<vault>/sources/snapshots/`. For a self-contained offline copy
+(CSS/images/fonts inlined, openable in any browser), install **monolith** — a
+single static binary:
+
+```bash
+# Debian/Ubuntu: apt install monolith, or cargo install monolith,
+# or grab a release binary: https://github.com/Y2Z/monolith
+monolith --version    # confirm it's on PATH
+```
+
+It's optional: without it, captures still preserve raw HTML + extracted text.
+Toggle via `link_capture.snapshot` (`monolith` | `none`) in `config.yaml`.
+
+## 7. Snapshot analysis
 
 See `specs/04-analysis.md`. Run the cost estimate first; outputs land in
 `<vault>/analysis/<run-id>/`.

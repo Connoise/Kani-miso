@@ -266,6 +266,7 @@ class TwitterArchiveProcessor:
                 trigger=f"Twitter archive import (ID: {tweet_id})",
                 context=f"Originally posted on Twitter",
                 attachments=attachments if attachments else None,
+                tweet_id=str(tweet_id) if tweet_id else None,
             )
             return capture_id
         except Exception as e:
@@ -314,6 +315,13 @@ class TwitterArchiveProcessor:
             if i % 100 == 0:
                 logger.info(f"Processing tweet {i}/{len(tweets)}...")
 
+            # Dedup: a tweet that was ever queued (any status) is skipped, so
+            # re-importing a fresh full archive export only adds new tweets.
+            tweet_id = str(tweet.get('id_str') or tweet.get('id', '') or '')
+            if tweet_id and self.queue.has_tweet(tweet_id):
+                stats['skipped'] += 1
+                continue
+
             capture_id = self.add_tweet_to_queue(tweet)
             if capture_id:
                 stats['added'] += 1
@@ -322,6 +330,7 @@ class TwitterArchiveProcessor:
 
         logger.info(
             f"Processing complete: {stats['added']} added, "
+            f"{stats['skipped']} skipped (already imported), "
             f"{stats['failed']} failed out of {stats['total']} total"
         )
 

@@ -37,12 +37,22 @@ class TelegramBot:
 
         Args:
             bot_token: Telegram bot token from BotFather
-            allowed_chat_id: Optional chat ID to restrict to
+            allowed_chat_id: Chat ID to serve. Required — the bot serves
+                exactly one chat (the owner's), per specs/05-ai-and-ops.md.
         """
         self.bot_token = bot_token
-        self.allowed_chat_id = int(allowed_chat_id) if allowed_chat_id else None
+        if not allowed_chat_id or str(allowed_chat_id).strip() in ("", "your_chat_id_here"):
+            raise ValueError(
+                "TELEGRAM_CHAT_ID is required: the bot only serves the owner's "
+                "chat and must never listen to all chats. Set it in config/.env "
+                "(see SETUP.md)."
+            )
+        self.allowed_chat_id = int(allowed_chat_id)
         self.base_url = f"https://api.telegram.org/bot{bot_token}"
         self.last_update_id = 0
+        # Optional callback for the /process command; wired by run.py so the
+        # combined runner can trigger a processing pass from Telegram.
+        self.on_process_request = None
 
         # Load config
         repo_root = Path(__file__).parent.parent
@@ -82,10 +92,7 @@ class TelegramBot:
         self.documents_enabled = self.config.get('documents', {}).get('enabled', True)
 
         logger.info("Telegram bot initialized")
-        if self.allowed_chat_id:
-            logger.info(f"Listening to chat ID: {self.allowed_chat_id}")
-        else:
-            logger.info("Listening to ALL chats (no restriction)")
+        logger.info(f"Listening to chat ID: {self.allowed_chat_id}")
         if self.images_enabled:
             logger.info("Image capture enabled")
 
@@ -219,8 +226,20 @@ class TelegramBot:
                 f"/help - Show message format\n"
                 f"/stats - Queue statistics\n"
                 f"/pending - Show pending images\n"
+                f"/process - Process pending captures now\n"
             )
             self.send_message(chat_id, welcome)
+
+        elif command == '/process':
+            if self.on_process_request:
+                self.on_process_request(chat_id)
+            else:
+                self.send_message(
+                    chat_id,
+                    "Processing is not attached to this bot instance.\n"
+                    "Use `python scripts/run.py` (bot + processing) or run "
+                    "`python scripts/processor.py` separately.",
+                )
 
         elif command == '/help':
             help_text = (
@@ -280,7 +299,7 @@ class TelegramBot:
                 return
 
             # Check if chat is allowed
-            if self.allowed_chat_id and chat_id != self.allowed_chat_id:
+            if chat_id != self.allowed_chat_id:
                 logger.warning(f"Ignoring photo from unauthorized chat: {chat_id}")
                 return
 
@@ -342,7 +361,7 @@ class TelegramBot:
                 return
 
             # Check if chat is allowed
-            if self.allowed_chat_id and chat_id != self.allowed_chat_id:
+            if chat_id != self.allowed_chat_id:
                 logger.warning(f"Ignoring document from unauthorized chat: {chat_id}")
                 return
 
@@ -486,7 +505,7 @@ class TelegramBot:
                 return
 
             # Check if chat is allowed
-            if self.allowed_chat_id and chat_id != self.allowed_chat_id:
+            if chat_id != self.allowed_chat_id:
                 logger.warning(f"Ignoring message from unauthorized chat: {chat_id}")
                 return
 
@@ -559,6 +578,29 @@ class TelegramBot:
             if chat_id:
                 self.send_message(chat_id, f"❌ Error: {str(e)}")
 
+    def poll_once(self) -> int:
+        """
+        Fetch and handle one batch of updates.
+
+        Returns the number of updates handled. Used by run() and by the
+        combined runner (run.py), which interleaves polling with processing.
+        """
+        result = self.get_updates()
+
+        if not result or not result.get('ok'):
+            time.sleep(1)
+            return 0
+
+        updates = result.get('result', [])
+
+        for update in updates:
+            self.last_update_id = update['update_id']
+            self.handle_message(update)
+            # Persist update ID so we don't lose messages on restart
+            self.queue.set_last_update_id(self.last_update_id)
+
+        return len(updates)
+
     def run(self):
         """Run the bot (blocking)."""
         logger.info("=" * 60)
@@ -569,21 +611,7 @@ class TelegramBot:
 
         try:
             while True:
-                # Get updates
-                result = self.get_updates()
-
-                if not result or not result.get('ok'):
-                    time.sleep(1)
-                    continue
-
-                # Process updates
-                updates = result.get('result', [])
-
-                for update in updates:
-                    self.last_update_id = update['update_id']
-                    self.handle_message(update)
-                    # Persist update ID so we don't lose messages on restart
-                    self.queue.set_last_update_id(self.last_update_id)
+                self.poll_once()
 
         except KeyboardInterrupt:
             logger.info("\nBot stopped by user")
@@ -609,8 +637,13 @@ def main():
         logger.error("Please replace with your actual bot token")
         sys.exit(1)
 
-    # Create and run bot
-    bot = TelegramBot(bot_token, chat_id)
+    # Create and run bot (raises if TELEGRAM_CHAT_ID is missing — the
+    # allowlist is mandatory; the bot never listens to all chats)
+    try:
+        bot = TelegramBot(bot_token, chat_id)
+    except ValueError as e:
+        logger.error(str(e))
+        sys.exit(1)
     bot.run()
 
 

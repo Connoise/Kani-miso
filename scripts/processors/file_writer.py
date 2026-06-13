@@ -3,7 +3,9 @@ File Writer for Kani-miso
 Handles creation and writing of markdown files.
 """
 
+import os
 import re
+import tempfile
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
@@ -104,7 +106,9 @@ class FileWriter:
         """
         type_to_folder = {
             'Thought': self.folders['notes'],
-            'Reflection': self.folders['reflections'],
+            # Reflections are notes with a different type, not a separate
+            # folder (specs/01-data-model.md — post-pivot model)
+            'Reflection': self.folders['notes'],
             'Question': self.folders['notes'],
             'Source': self.folders['sources'],
             'Log': self.folders['notes'],
@@ -193,9 +197,23 @@ class FileWriter:
             file_path = dest_folder / f"{base}-{timestamp}.md"
             logger.warning(f"File exists, using: {file_path.name}")
 
-        # Write file
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(markdown_content)
+        # Atomic write: a crash mid-write must never leave a truncated note
+        # in the vault. Write to a temp file in the same directory, then
+        # rename into place (os.replace is atomic on POSIX).
+        dest_folder.mkdir(parents=True, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(
+            dir=dest_folder, prefix=f".{file_path.stem}.", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                f.write(markdown_content)
+            os.replace(tmp_path, file_path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
         logger.info(f"Wrote note: {file_path.relative_to(self.notes_root)}")
         return file_path

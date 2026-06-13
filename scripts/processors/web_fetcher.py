@@ -5,6 +5,8 @@ Handles fetching webpages and converting HTML to markdown.
 
 import re
 import html
+import ipaddress
+import socket
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 from urllib.parse import urlparse, urljoin
@@ -47,6 +49,10 @@ class WebFetcher:
 
     # Maximum content size (10MB)
     MAX_CONTENT_SIZE = 10 * 1024 * 1024
+
+    # Redirect hops before giving up; each hop is re-validated against the
+    # private-address blocklist (SSRF guard)
+    MAX_REDIRECTS = 5
 
     def __init__(
         self,
@@ -98,6 +104,42 @@ class WebFetcher:
             return all([result.scheme in ('http', 'https'), result.netloc])
         except Exception:
             return False
+
+    def _validate_target(self, url: str) -> None:
+        """
+        SSRF guard: refuse to fetch hosts that resolve to private, loopback,
+        link-local, or otherwise non-public addresses (cloud metadata, LAN
+        services, localhost). Called for the initial URL and for every
+        redirect hop.
+
+        Note: the address is re-resolved by requests when connecting, so a
+        DNS-rebinding attacker with a sub-second TTL could still flip the
+        record between check and use. Accepted residual risk for a
+        single-user local tool; pinning the resolved IP would require a
+        custom transport adapter.
+
+        Raises:
+            ValueError: If the URL is invalid or resolves to a blocked range.
+        """
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+            raise ValueError(f"Invalid or unsupported URL: {url}")
+
+        hostname = parsed.hostname
+        try:
+            addr_info = socket.getaddrinfo(hostname, parsed.port or 0,
+                                           proto=socket.IPPROTO_TCP)
+        except socket.gaierror as e:
+            raise ValueError(f"Could not resolve host {hostname!r}: {e}")
+
+        for family, _type, _proto, _canon, sockaddr in addr_info:
+            ip = ipaddress.ip_address(sockaddr[0])
+            if (ip.is_private or ip.is_loopback or ip.is_link_local
+                    or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+                raise ValueError(
+                    f"Refusing to fetch {hostname!r}: resolves to "
+                    f"non-public address {ip} (SSRF guard)"
+                )
 
     def extract_url_from_text(self, text: str) -> Optional[str]:
         """
@@ -164,12 +206,32 @@ class WebFetcher:
         """
         logger.info(f"Fetching URL: {url}")
 
-        response = self.session.get(
-            url,
-            timeout=self.timeout,
-            allow_redirects=True,
-            stream=True,
-        )
+        # Follow redirects manually so every hop passes the SSRF guard and
+        # the chain length is bounded.
+        current_url = url
+        response = None
+        for _hop in range(self.MAX_REDIRECTS + 1):
+            self._validate_target(current_url)
+
+            response = self.session.get(
+                current_url,
+                timeout=self.timeout,
+                allow_redirects=False,
+                stream=True,
+            )
+
+            if response.is_redirect or response.is_permanent_redirect:
+                location = response.headers.get('Location')
+                response.close()
+                if not location:
+                    raise ValueError("Redirect response without Location header")
+                current_url = urljoin(current_url, location)
+                logger.info(f"Following redirect to: {current_url}")
+                continue
+            break
+        else:
+            raise ValueError(f"Too many redirects (more than {self.MAX_REDIRECTS})")
+
         response.raise_for_status()
 
         # Check content type
@@ -196,8 +258,10 @@ class WebFetcher:
         except UnicodeDecodeError:
             html_content = content.decode('utf-8', errors='replace')
 
-        logger.info(f"Fetched {len(content)} bytes from {url}")
-        return html_content, dict(response.headers)
+        logger.info(f"Fetched {len(content)} bytes from {current_url}")
+        headers = dict(response.headers)
+        headers['x-kanimiso-final-url'] = current_url
+        return html_content, headers
 
     def extract_metadata(self, soup: 'BeautifulSoup', url: str) -> Dict[str, Any]:
         """
@@ -467,8 +531,10 @@ class WebFetcher:
         result = {
             'success': False,
             'url': url,
+            'final_url': url,
             'metadata': {},
             'markdown_content': '',
+            'html': '',
             'error': None,
         }
 
@@ -482,20 +548,23 @@ class WebFetcher:
                 result['error'] = f"Invalid URL: {url}"
                 return result
 
-            # Fetch the page
+            # Fetch the page (raw HTML is kept for the preservation layer)
             html_content, headers = self.fetch_url(url)
+            final_url = headers.get('x-kanimiso-final-url', url)
+            result['html'] = html_content
+            result['final_url'] = final_url
 
             # Parse with BeautifulSoup
             soup = BeautifulSoup(html_content, 'html.parser')
 
-            # Extract metadata
-            result['metadata'] = self.extract_metadata(soup, url)
+            # Extract metadata (relative links resolve against the final URL)
+            result['metadata'] = self.extract_metadata(soup, final_url)
 
             # Extract main content
             main_content = self.extract_main_content(soup)
 
             # Convert to markdown
-            result['markdown_content'] = self.html_to_markdown(main_content, url)
+            result['markdown_content'] = self.html_to_markdown(main_content, final_url)
 
             result['success'] = True
             logger.info(f"Successfully processed URL: {url}")

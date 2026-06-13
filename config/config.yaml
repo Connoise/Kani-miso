@@ -25,26 +25,39 @@ processing:
   batch_size: 500  # Max items to process in one run (increased for large tweet batches)
   auto_commit: true  # Create git commits automatically
   auto_push: false  # Require manual review before push
+  # Output validation before any note reaches the vault (specs/02-capture.md):
+  # strict = reject invalid output (capture stays queued) | lenient = warn only | off
+  output_validation: strict
 
 # LLM backend: Claude only (local Ollama/hybrid routing removed in Phase 0)
 claude:
-  model: "claude-opus-4-5-20251101"  # Claude Opus 4.5 - Highest quality, best reasoning
+  model: "claude-opus-4-8"  # Current Opus - highest quality, best reasoning
   max_tokens: 4096
-  temperature: 0.7  # Slightly creative but consistent
-  # Alternative: claude-sonnet-4-5-20250929 for faster/cheaper (still excellent)
+  # No temperature: current models reject sampling params and use adaptive
+  # thinking instead (set automatically by the client).
+  # Alternative: claude-sonnet-4-6 for faster/cheaper (still excellent)
 
 git:
   commit_prefix: "process"  # Commit message prefix
   branch_strategy: "main"  # Commit directly to main
 
 folders:
+  # Reflections are notes with type: reflection, not a separate folder
+  # (specs/01-data-model.md); legacy reflections/ content is still read.
   notes: "notes"
-  reflections: "reflections"
   sources: "sources"
   inbox: "inbox"
   hubs: "hubs"
   tweets: "tweets"
   images: "images"  # Date-organized image storage (images/YYYY/MM/DD/)
+
+# Link capture: preserve webpages as offline snapshots + cataloged notes
+# (specs/02-capture.md, project-review/06-link-capture-design.md)
+link_capture:
+  snapshot: monolith            # monolith | none (monolith is an optional binary)
+  snapshot_timeout_seconds: 60
+  max_snapshot_mb: 25
+  note_content_word_cap: 2000   # Page Content head in the note; full text in extracted.md
 
 images:
   enabled: true

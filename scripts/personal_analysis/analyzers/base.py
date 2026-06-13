@@ -30,8 +30,11 @@ class BaseAnalyzer(ABC):
     - get_prompt(): Returns the analysis prompt
     """
 
-    # Master system prompt shared by all analyzers
-    MASTER_SYSTEM_PROMPT = """You are conducting a deep personal analysis of someone's private notes and tweets.
+    # Master system prompt shared by all analyzers.
+    # Tone contract per specs/04-analysis.md: candid, evidence-cited,
+    # confidence-marked, framed as a dated snapshot rather than a verdict. The
+    # owner generates this from their own corpus for self-understanding.
+    MASTER_SYSTEM_PROMPT = """You are conducting a deep personal analysis of the owner's own notes and tweets, which they have chosen to have analyzed for self-understanding.
 Your role is that of a highly skilled analyst combining expertise in:
 - Clinical psychology
 - Emotional intelligence research
@@ -40,10 +43,16 @@ Your role is that of a highly skilled analyst combining expertise in:
 - Intellectual and cognitive analysis
 - Social psychology and perception
 
+## Tone
+
+Be candid and uncensored. State difficult observations plainly — no placation,
+no softening for comfort, no therapeutic hedging. The value of this analysis is
+its honesty; flattering or withholding negative findings defeats its purpose.
+Candor means following the evidence, not manufacturing severity.
+
 ## Your Mandate
 
 You MUST:
-- Be completely honest, even when findings are unflattering
 - Base every claim on evidence from the notes
 - Acknowledge uncertainty when it exists
 - Surface patterns that may be invisible to the creator
@@ -51,29 +60,22 @@ You MUST:
 - Look for what is NOT said as well as what is said
 
 You MUST NOT:
-- Soften findings to protect feelings
 - Fill gaps with speculation presented as fact
-- Withhold negative insights
-- Flatter or placate
 - Diagnose medical conditions (describe patterns instead)
 - Use outside information not in the notes
 
-## Assumptions
-
-You may assume the creator:
-- Is psychologically healthy and stable
-- Genuinely wants honest analysis
-- Will use insights for self-improvement
-- Can handle critical feedback
-- Poses no risk to self or others
-
 ## Evidence Standards
 
-For each claim:
+For each substantive claim:
 - Cite specific notes when possible (use [[note-name]] format)
-- Indicate confidence level (high/medium/low)
+- Indicate confidence level (high/medium/low); say so when evidence is thin
 - Distinguish between observed patterns and inferences
-- Note when evidence is thin
+
+## Framing
+
+This is a snapshot of the corpus as it stands now, not a final verdict. A later
+run on more material may revise or contradict these findings; both stand as
+records. Describe who the evidence shows the person to be at this point in time.
 
 ## Output Format
 
@@ -137,12 +139,16 @@ Use Obsidian-compatible formatting:
             # Build messages - use extraction if available
             messages = self._build_messages(content, images, extraction)
 
-            # Build API call kwargs
+            # Build API call kwargs. Adaptive thinking + effort give the model
+            # room to reason on these intelligence-heavy analyses (current
+            # models: the old fixed thinking budget_tokens is removed).
             api_kwargs = {
                 "model": model,
                 "max_tokens": self.config.max_output_tokens,
                 "system": self.MASTER_SYSTEM_PROMPT,
                 "messages": messages,
+                "thinking": {"type": "adaptive"},
+                "output_config": {"effort": self.config.effort},
             }
 
             # Use streaming to handle potentially long operations
